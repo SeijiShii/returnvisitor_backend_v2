@@ -1,0 +1,9 @@
+server_key_conoha/
+dbclient.js
+*.csr
+*.crt
+*.key
+dbclient_dev.js
+*.dump
+rv_websocket_server.js
+.gitignore

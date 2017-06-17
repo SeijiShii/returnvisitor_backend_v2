@@ -35,16 +35,16 @@ RVDataDB.prototype.changeSingleData = (user_id, data, callback) => {
         console.log('result.state: ' + result.state);
         callback(result);
       } else {
-        RVDataDB.prototype.insertSingData(user_id, data, callback);
+        RVDataDB.prototype.insertSingleData(user_id, data, callback);
       }
     }
   });
   _client.end();
 }
 
-RVDataDB.prototype.insertSingData = (user_id, data, callback) => {
+RVDataDB.prototype.insertSingleData = (user_id, data, callback) => {
 
-  // console.log('insertSingData called.');
+  // console.log('insertSingleData called.');
 
   var insertQuery = 'INSERT INTO returnvisitor_db.rv_data (user_id, data_id, class_name, updated_at, json_data) VALUES ("?", "?", "?", "?", "?" );';
   // console.log( 'insertQuery: ' + insertQuery);

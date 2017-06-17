@@ -69,7 +69,7 @@ wsServer.on('request', (req) => {
     connection.on('message', function(message) {
         if (message.type === 'utf8') {
 					let dataFrame = JSON.parse(message);
-
+					separateOnFrameCategory(dataFrame);
         }
     });
 
@@ -77,3 +77,50 @@ wsServer.on('request', (req) => {
         console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.');
     });
 });
+
+const separateOnFrameCategory(dataFrame) => {
+	switch (dataFrame.FrameCategory) {
+		case LOGIN_REQUEST:
+			onLoginRequest(dataFrame.dataBody);
+			break;
+
+		case CREATE_USER_REQUEST:
+			onCreateUserRequest(dataFrame.dataBody);
+			break;
+
+		case SYNC_DATA_REQUEST:
+			onSyncDataRequest(dataFrame.dataBody);
+			break;
+
+		case DEVICE_DATA_FRAME:
+			onDeviceDataFrame(dataFrame.dataBody, dataFrame.token);
+			break;
+
+		case DEVICE_DATA_END_FRAME:
+			onDeviceDataEndFrame(dataFrame.token);
+			break;
+
+		default:
+
+	}
+}
+
+const onLoginRequest(dataBody) => {
+
+}
+
+const onCreateUserRequest(dataBody) => {
+
+}
+
+const onSyncDataRequest(dataBody) => {
+
+}
+
+const onDeviceDataFrame(dataBody, token) => {
+
+}
+
+const onDeviceDataEndFrame(token) => {
+
+}

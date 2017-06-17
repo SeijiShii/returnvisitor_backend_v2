@@ -12,7 +12,7 @@ function RVUsersDB(client) {
   _client = client;
 }
 
-RVUsersDB.prototype.login = function(user_name, password, callback) {
+RVUsersDB.prototype.login = (user_name, password, callback) => {
   // ログインの流れ
   // ユーザ名とパスワードでDBクエリ
   // if データ件数が1件ヒット
@@ -39,28 +39,31 @@ RVUsersDB.prototype.login = function(user_name, password, callback) {
     if (rows) {
       if (rows.info.numRows == 1) {
         // データが1件だけの時のみデータを返す。
-        var result = {};
-        result.user = rows[0];
-        result.state = STATUS_202_AUTHENTICATED;
+        let result = {
+          user: rows[0],
+          status_code: STATUS_202_AUTHENTICATED
+        };
         console.log(STATUS_202_AUTHENTICATED);
         callback(result);
       } else {
         // 1件以外の時
         RVUsersDB.prototype.existsUser(user_name, function(exists){
           if (exists) {
-            var result = {
-              user:{}
+            let result = {
+              user:{
+                user_name: user_name
+              },
+              status_code: STATUS_401_UNAUTHORIZED
             }
-            result.user.user_name = user_name;
-            result.state = STATUS_401_UNAUTHORIZED;
             console.log(STATUS_401_UNAUTHORIZED);
             callback(result);
           } else {
-            var result = {
-              user:{}
+            let result = {
+              user:{
+                user_name: user_name
+              },
+              status_code: STATUS_404_NOT_FOUND
             }
-            result.user.user_name = user_name;
-            result.state = STATUS_404_NOT_FOUND;
             console.log(STATUS_404_NOT_FOUND);
             callback(result);
           }
@@ -68,11 +71,12 @@ RVUsersDB.prototype.login = function(user_name, password, callback) {
       }
     } else {
       // rowがnullになるケースがあるかどうかは分からないけれど。
-      var result = {
-        user:{}
+      let result = {
+        user:{
+          user_name: user_name
+        },
+        status_code: STATUS_404_NOT_FOUND
       }
-      result.user.user_name = user_name;
-      result.state = STATUS_404_NOT_FOUND;
       console.log(STATUS_404_NOT_FOUND);
       callback(result);
     }
@@ -81,9 +85,9 @@ RVUsersDB.prototype.login = function(user_name, password, callback) {
   _client.end();
 }
 
-RVUsersDB.prototype.createUser = function(user_name, password, callback) {
+RVUsersDB.prototype.createUser = (user_name, password, callback) => {
 
-  // callback(result {user{user_name, password}, state})
+  // callback(result {user{user_name, password}, status_code})
   // アカウント新規作成の流れ
   //    if ユーザ名が存在するか
   //      400 BAD REAUEST DUPLICATE USER
@@ -99,40 +103,45 @@ RVUsersDB.prototype.createUser = function(user_name, password, callback) {
 
       if (exists) {
 
-        var result = {
-          user:{}
+        let result = {
+          user:{
+            user_name: user_name
+          },
+          status_code: STATUS_400_DUPLICATE_USER_NAME
         };
-        result.user.user_name = user_name;
-        result.state = STATUS_400_DUPLICATE_USER_NAME;
+
         console.log(STATUS_400_DUPLICATE_USER_NAME);
         callback(result);
       } else {
         // ユーザ名が8文字以下か
         if (user_name.length < 8) {
 
-          var result = {
-            user:{}
+          let result = {
+            user:{
+              user_name: user_name
+            },
+            status_code: STATUS_400_SHORT_USER_NAME
           };
-          result.user.user_name = user_name;
-          result.state = STATUS_400_SHORT_USER_NAME;
+
           console.log(STATUS_400_SHORT_USER_NAME);
           callback(result);
         } else {
           // パスワードが8文字以下か
           if (password.length < 8) {
 
-            var result = {
-              user:{}
+            let result = {
+              user:{
+                user_name: user_name
+              },
+              status_code: STATUS_400_SHORT_PASSWORD
             };
-            result.user.user_name = user_name;
-            result.state = STATUS_400_SHORT_PASSWORD;
+
             console.log(STATUS_400_SHORT_PASSWORD);
             callback(result);
           } else {
 
             // generate user_id
-            var date = new Date();
-            var dateString = date.getTime().toString();
+            var dateString = new Date().getTime().toString();
             var user_id = 'user_id_' + user_name + '_' + dateString;
             console.log('user_id: ' + user_id);
 
@@ -140,12 +149,12 @@ RVUsersDB.prototype.createUser = function(user_name, password, callback) {
             var createUserQuery = 'INSERT INTO returnvisitor_db.users (user_name, password, user_id, updated_at) VALUES ("?", "?", "?","?" );';
             console.log(createUserQuery);
             let dateTime = new Date().getTime().toString();
-            _client.query(createUserQuery, [user_name, password, user_id, dateTime], function(err, rows) {
+            _client.query(createUserQuery, [user_name, password, user_id, dateTime], (err, rows) => {
               console.dir(err);
               if (rows) {
                 if (rows.info.affectedRows == 1) {
-                  RVUsersDB.prototype.login(user_name, password, function(result){
-                    result.state = STATUS_201_CREATED;
+                  RVUsersDB.prototype.login(user_name, password, (result) => {
+                    result.status_code = STATUS_201_CREATED;
                     console.log(STATUS_201_CREATED);
                     callback(result);
                   });
@@ -160,14 +169,14 @@ RVUsersDB.prototype.createUser = function(user_name, password, callback) {
 
 }
 
-RVUsersDB.prototype.existsUser = function(user_name, callback) {
+RVUsersDB.prototype.existsUser = (user_name, callback) => {
 
   // callback(boolean)
 
   console.log('existsUser called!');
   var queryUserName = 'SELECT * FROM returnvisitor_db.users WHERE user_name = "?";';
   console.log(queryUserName);
-  _client.query(queryUserName, [user_name], function(err, rows) {
+  _client.query(queryUserName, [user_name], (err, rows) => {
     if (rows) {
       if (rows.info.numRows >= 1) {
         console.log(user_name + ': Exists.');

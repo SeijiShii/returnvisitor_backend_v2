@@ -62,15 +62,17 @@ const wsServer = new WebSocketServer({
     autoAcceptConnections: false
 });
 
+var connection;
 wsServer.on('request', (req) => {
 
-		let connection = req.accept(null, req.origin);
+		connection = req.accept(null, req.origin);
 
     connection.on('message', function(message) {
-        if (message.type === 'utf8') {
-					let dataFrame = JSON.parse(message);
-					separateOnFrameCategory(dataFrame);
-        }
+      if (message.type === 'utf8') {
+				let data_frame = JSON.parse(message);
+				logger.loggerAction.info('Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category);
+				separateOnFrameCategory(data_frame);
+      }
     });
 
     connection.on('close', (reasonCode, description) => {
@@ -78,26 +80,26 @@ wsServer.on('request', (req) => {
     });
 });
 
-const separateOnFrameCategory(dataFrame) => {
-	switch (dataFrame.FrameCategory) {
+const separateOnFrameCategory(data_frame) => {
+	switch (data_frame.frame_category) {
 		case LOGIN_REQUEST:
-			onLoginRequest(dataFrame.dataBody);
+			onLoginRequest(data_frame.data_body);
 			break;
 
 		case CREATE_USER_REQUEST:
-			onCreateUserRequest(dataFrame.dataBody);
+			onCreateUserRequest(data_frame.data_body);
 			break;
 
 		case SYNC_DATA_REQUEST:
-			onSyncDataRequest(dataFrame.dataBody);
+			onSyncDataRequest(data_frame.data_body);
 			break;
 
 		case DEVICE_DATA_FRAME:
-			onDeviceDataFrame(dataFrame.dataBody, dataFrame.token);
+			onDevicedata_frame(data_frame.data_body, data_frame.token);
 			break;
 
 		case DEVICE_DATA_END_FRAME:
-			onDeviceDataEndFrame(dataFrame.token);
+			onDeviceDataEndFrame(data_frame.token);
 			break;
 
 		default:
@@ -105,12 +107,39 @@ const separateOnFrameCategory(dataFrame) => {
 	}
 }
 
-const onLoginRequest(dataBody) => {
+const onLoginRequest(data_body) => {
+	usersDB.login(data_body.user_name, data_body.password, (result) => {
+		var response = {
+			frame_category: LOGIN_RESPONSE,
+			data_body: {
+				status_code: result.status_code
+			},
+			token: null
+		};
+		var jsonRes = JSON.stringify(res);
+		console.log('response: ' + jsonRes);
+		socket.send(jsonRes);
 
+		logger.loggerAction.info('Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category+ ', status_code: ' + result.status_code);
+	});
+	break;
 }
 
 const onCreateUserRequest(dataBody) => {
+	usersDB.createUser(data_body.user_name, data_body.password, (result) => {
+		var response = {
+			frame_category: LOGIN_RESPONSE,
+			data_body: {
+				status_code: result.status_code
+			},
+			token: null
+		};
+		var jsonRes = JSON.stringify(res);
+		console.log('response: ' + jsonRes);
+		socket.send(jsonRes);
 
+		logger.loggerAction.info('Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category+ ', status_code: ' + result.status_code);
+	});
 }
 
 const onSyncDataRequest(dataBody) => {

@@ -7,3 +7,4 @@ dbclient_dev.js
 *.dump
 rv_websocket_server.js
 .gitignore
+hashed_token.js

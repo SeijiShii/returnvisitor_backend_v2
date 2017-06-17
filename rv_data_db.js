@@ -1,3 +1,11 @@
+// c.query('SELECT * FROM users WHERE id = ? AND name = ?',
+//         [ 1337, 'Frylock' ],
+//         function(err, rows) {
+//   if (err)
+//     throw err;
+//   console.dir(rows);
+// });
+
 var _client;
 
 var STATE_SUCCESSFULLY_INSERT_DATA = "STATE_SUCCESSFULLY_INSERT_DATA";
@@ -11,9 +19,10 @@ function RVDataDB(client) {
 
 RVDataDB.prototype.changeSingleData = (user_id, data, callback) => {
 
-  var changeQuery = 'UPDATE returnvisitor_db.rv_data SET class_name = "' + data.class_name + '" , updated_at = "'+ data.updated_at +'", json_data = "' + data.data + '" WHERE data_id = "' + data.id + '" AND user_id = "' + user_id + '";';
+  // データ更新日が古ければ上書き
+  var changeQuery = 'UPDATE returnvisitor_db.rv_data SET class_name = "?" , updated_at = "?", json_data = "?" WHERE data_id = "?" AND user_id = "?" AND updated_at < "?";';
   console.log(changeQuery);
-  _client.query(changeQuery, (err, rows) => {
+  _client.query(changeQuery, [data.class_name, data.updated_at, data.data, data.id, user_id, data.updated_at], (err, rows) => {
 
     // console.dir(rows);
     // console.dir(err);
@@ -37,9 +46,9 @@ RVDataDB.prototype.insertSingData = (user_id, data, callback) => {
 
   // console.log('insertSingData called.');
 
-  var insertQuery = 'INSERT INTO returnvisitor_db.rv_data (user_id, data_id, class_name, updated_at, json_data) VALUES ("' + user_id + '", "' + data.id + '", "' + data.class_name + '", "' + data.updated_at + '","' + data.data + '" );';
+  var insertQuery = 'INSERT INTO returnvisitor_db.rv_data (user_id, data_id, class_name, updated_at, json_data) VALUES ("?", "?", "?", "?", "?" );';
   // console.log( 'insertQuery: ' + insertQuery);
-  _client.query(insertQuery, (err, rows) => {
+  _client.query(insertQuery, [user_id, data.id, data.class_name, data.updated_at, data.data], (err, rows) => {
     if (rows) {
       if (rows.info.affectedRows == 1) {
         var result = {
@@ -90,9 +99,9 @@ RVDataDB.prototype.saveDataArray = (user_id, array, callback) => {
 }
 
 RVDataDB.prototype.deleteSingleData = (user_id, data_id, callback) => {
-  var deleteDataQuery = 'DELETE FROM returnvisitor_db.rv_data WHERE user_id = "' + user_id + '" AND data_id = "' + data_id + '";';
+  var deleteDataQuery = 'DELETE FROM returnvisitor_db.rv_data WHERE user_id = "?" AND data_id = "?";';
   console.log('deleteDataQuery: ' + deleteDataQuery);
-  _client.query(deleteDataQuery, (err, rows) =>{
+  _client.query(deleteDataQuery, [user_id, data_id], (err, rows) =>{
     console.log('err:');
     console.dir(err);
     console.log('rows:');
@@ -111,10 +120,10 @@ RVDataDB.prototype.deleteSingleData = (user_id, data_id, callback) => {
 RVDataDB.prototype.loadDataLaterThanTime = (user_id, time, callback) => {
   // callback(loaded_rows)
   console.log('loadDataLaterThanTime called.');
-  var laterDataQuery = 'SELECT * FROM returnvisitor_db.rv_data WHERE user_id = "' + user_id + '" AND updated_at > "' + time + '";'
+  var laterDataQuery = 'SELECT * FROM returnvisitor_db.rv_data WHERE user_id = "?" AND updated_at > "?";'
   console.log('laterDataQuery: ' + laterDataQuery);
 
-  _client.query(laterDataQuery, (err, rows) => {
+  _client.query(laterDataQuery, [user_id, time], (err, rows) => {
 
     var loaded_rows = [];
     for (var i = 0 ; i < rows.length ; i++ ) {

@@ -24,10 +24,18 @@ RVUsersDB.prototype.login = function(user_name, password, callback) {
   //    else
   //        404 NOT_FOUND ユーザ名だけを返す。
 
+//   c.query('SELECT * FROM users WHERE id = ? AND name = ?',
+//         [ 1337, 'Frylock' ],
+//         function(err, rows) {
+//   if (err)
+//     throw err;
+//   console.dir(rows);
+// });
+
   console.log('users.login called!');
-  var queryUser = 'SELECT * FROM returnvisitor_db.users WHERE user_name = "' + user_name + '" AND password = "' + password + '";';
+  var queryUser = 'SELECT * FROM returnvisitor_db.users WHERE user_name = "?" AND password = "?" ;';
   console.log(queryUser);
-  _client.query(queryUser, function(err, rows){
+  _client.query(queryUser, [username, password], function(err, rows){
     if (rows) {
       if (rows.info.numRows == 1) {
         // データが1件だけの時のみデータを返す。
@@ -129,9 +137,10 @@ RVUsersDB.prototype.createUser = function(user_name, password, callback) {
             console.log('user_id: ' + user_id);
 
             // 新規作成クエリ
-            var createUserQuery = 'INSERT INTO returnvisitor_db.users (user_name, password, user_id, updated_at) VALUES ("' + user_name + '", "' + password + '", "' + user_id + '","' + new Date().getTime().toString() + '" );';
+            var createUserQuery = 'INSERT INTO returnvisitor_db.users (user_name, password, user_id, updated_at) VALUES ("?", "?", "?","?" );';
             console.log(createUserQuery);
-            _client.query(createUserQuery, function(err, rows) {
+            let dateTime = new Date().getTime().toString();
+            _client.query(createUserQuery, [user_name, password, user_id, dateTime], function(err, rows) {
               console.dir(err);
               if (rows) {
                 if (rows.info.affectedRows == 1) {
@@ -156,9 +165,9 @@ RVUsersDB.prototype.existsUser = function(user_name, callback) {
   // callback(boolean)
 
   console.log('existsUser called!');
-  var queryUserName = 'SELECT * FROM returnvisitor_db.users WHERE user_name = "' + user_name + '";';
+  var queryUserName = 'SELECT * FROM returnvisitor_db.users WHERE user_name = "?";';
   console.log(queryUserName);
-  _client.query(queryUserName, function(err, rows) {
+  _client.query(queryUserName, [user_name], function(err, rows) {
     if (rows) {
       if (rows.info.numRows >= 1) {
         console.log(user_name + ': Exists.');

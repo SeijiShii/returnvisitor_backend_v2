@@ -13,12 +13,13 @@ const	CLOUD_DATA_FRAME 			= 'CLOUD_DATA_FRAME';
 const	CLOUD_DATA_END_FRAME 	= 'CLOUD_DATA_END_FRAME';
 
 // RVResponseBody: StatusCode
-const STATUS_201_CREATED              = "STATUS_201_CREATED";
+const STATUS_200_SYNC_START_OK 				= 'STATUS_200_SYNC_START_OK';
+const STATUS_201_CREATED              = 'STATUS_201_CREATED';
 const STATUS_202_AUTHENTICATED        = 'STATUS_202_AUTHENTICATED';
 const STATUS_400_DUPLICATE_USER_NAME  = 'STATUS_400_DUPLICATE_USER_NAME';
-const STATUS_400_SHORT_USER_NAME      = "STATUS_400_SHORT_USER_NAME";
-const STATUS_400_SHORT_PASSWORD       = "STATUS_400_SHORT_PASSWORD";
-const STATUS_401_UNAUTHORIZED         = "STATUS_401_UNAUTHORIZED";
+const STATUS_400_SHORT_USER_NAME      = 'STATUS_400_SHORT_USER_NAME';
+const STATUS_400_SHORT_PASSWORD       = 'STATUS_400_SHORT_PASSWORD';
+const STATUS_401_UNAUTHORIZED         = 'STATUS_401_UNAUTHORIZED';
 const STATUS_404_NOT_FOUND            = 'STATUS_404_NOT_FOUND';
 
 const WebSocketServer = require('websocket').server;
@@ -65,6 +66,7 @@ const wsServer = new WebSocketServer({
 });
 
 var connection;
+var authToken;
 wsServer.on('request', (req) => {
 
 		connection = req.accept(null, req.origin);
@@ -122,13 +124,16 @@ const onLoginRequest = (data_body) => {
 			},
 			token: null
 		};
-		var jsonRes = JSON.stringify(data_frame);
-		// console.log('response: ' + jsonRes);
-		connection.sendUTF(jsonRes);
 
-		let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + result.status_code;
-		logger.loggerAction.info(logMessage);
-		console.log(new Date() + ' ' + logMessage);
+		sendDataFrame(data_frame);
+
+		// var jsonRes = JSON.stringify(data_frame);
+		// // console.log('response: ' + jsonRes);
+		// connection.sendUTF(jsonRes);
+		//
+		// let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + result.status_code;
+		// logger.loggerAction.info(logMessage);
+		// console.log(new Date() + ' ' + logMessage);
 	});
 }
 
@@ -141,24 +146,60 @@ const onCreateUserRequest = (data_body) => {
 			},
 			token: null
 		};
-		var jsonRes = JSON.stringify(data_frame);
-		// console.log('response: ' + jsonRes);
-		connection.sendUTF(jsonRes);
 
-		let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + result.status_code;
-		logger.loggerAction.info(logMessage);
-		console.log(new Date() + ' ' + logMessage);
+		sendDataFrame(data_frame)
+
+		// var jsonRes = JSON.stringify(data_frame);
+		// // console.log('response: ' + jsonRes);
+		// connection.sendUTF(jsonRes);
+		//
+		// let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + result.status_code;
+		// logger.loggerAction.info(logMessage);
+		// console.log(new Date() + ' ' + logMessage);
 	});
 }
 
-const onSyncDataRequest = (dataBody) => {
+const onSyncDataRequest = (data_body) => {
+	usersDB.login(data_body.user_name, data_body.password, (result) => {
+		if (result.status_code === STATUS_202_AUTHENTICATED) {
+			authToken = require('./hashed_token')(result.user.user_id);
+			var data_frame = {
+				frame_category: SYNC_DATA_RESPONSE,
+				data_body: {
+					status_code: STATUS_200_SYNC_START_OK
+				},
+				token: authToken
+			};
+			sendDataFrame(data_frame);
+
+		} else {
+			var data_frame = {
+				frame_category: SYNC_DATA_RESPONSE,
+				data_body: {
+					status_code: result.status_code
+				},
+				token: null
+			};
+			sendDataFrame(data_frame);
+
+		}
+	});
+}
+
+const onDeviceDataFrame = (data_body, token) => {
 
 }
 
-const onDeviceDataFrame = (dataBody, token) => {
+const onDeviceDataEndFrame = (data_body) => {
 
 }
 
-const onDeviceDataEndFrame = (token) => {
+const sendDataFrame = (data_frame) => {
+	var jsonRes = JSON.stringify(data_frame);
+	// console.log('response: ' + jsonRes);
+	connection.sendUTF(jsonRes);
 
+	let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + data_frame.data_body.status_code;
+	logger.loggerAction.info(logMessage);
+	console.log(new Date() + ' ' + logMessage);
 }

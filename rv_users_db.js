@@ -32,10 +32,11 @@ RVUsersDB.prototype.login = (user_name, password, callback) => {
 //   console.dir(rows);
 // });
 
-  console.log('users.login called!');
-  var queryUser = 'SELECT * FROM returnvisitor_db.users WHERE user_name = "?" AND password = "?" ;';
-  console.log(queryUser);
-  _client.query(queryUser, [username, password], function(err, rows){
+  // console.log('users.login called!');
+  var queryUser = 'SELECT * FROM returnvisitor_db.users WHERE user_name = :user_name AND password = :password ;';
+  _client.query(queryUser,
+    {user_name: user_name, password: password}, 
+    (err, rows) => {
     if (rows) {
       if (rows.info.numRows == 1) {
         // データが1件だけの時のみデータを返す。
@@ -43,11 +44,12 @@ RVUsersDB.prototype.login = (user_name, password, callback) => {
           user: rows[0],
           status_code: STATUS_202_AUTHENTICATED
         };
-        console.log(STATUS_202_AUTHENTICATED);
+        console.log(new Date() + ' Login authenticated: ' + user_name);
+        // console.log(STATUS_202_AUTHENTICATED);
         callback(result);
       } else {
         // 1件以外の時
-        RVUsersDB.prototype.existsUser(user_name, function(exists){
+        RVUsersDB.prototype.existsUser(user_name, (exists) => {
           if (exists) {
             let result = {
               user:{
@@ -55,7 +57,8 @@ RVUsersDB.prototype.login = (user_name, password, callback) => {
               },
               status_code: STATUS_401_UNAUTHORIZED
             }
-            console.log(STATUS_401_UNAUTHORIZED);
+            console.log(new Date() + ' Login unauthorized: ' + user_name);
+            // console.log(STATUS_401_UNAUTHORIZED);
             callback(result);
           } else {
             let result = {
@@ -64,7 +67,8 @@ RVUsersDB.prototype.login = (user_name, password, callback) => {
               },
               status_code: STATUS_404_NOT_FOUND
             }
-            console.log(STATUS_404_NOT_FOUND);
+            // console.log(STATUS_404_NOT_FOUND);
+            console.log(new Date() + ' Login not found: ' + user_name);
             callback(result);
           }
         });
@@ -77,7 +81,8 @@ RVUsersDB.prototype.login = (user_name, password, callback) => {
         },
         status_code: STATUS_404_NOT_FOUND
       }
-      console.log(STATUS_404_NOT_FOUND);
+      // console.log(STATUS_404_NOT_FOUND);
+      console.log(new Date() + ' Login not found: ' + user_name);
       callback(result);
     }
 
@@ -99,7 +104,7 @@ RVUsersDB.prototype.createUser = (user_name, password, callback) => {
   //          400 BAD REQUEST SHORT PASSWORD
   //        else
   //          新規作成　201 CREATED
-  RVUsersDB.prototype.existsUser(user_name, function(exists) {
+  RVUsersDB.prototype.existsUser(user_name, (exists) => {
 
       if (exists) {
 
@@ -110,7 +115,8 @@ RVUsersDB.prototype.createUser = (user_name, password, callback) => {
           status_code: STATUS_400_DUPLICATE_USER_NAME
         };
 
-        console.log(STATUS_400_DUPLICATE_USER_NAME);
+        // console.log(STATUS_400_DUPLICATE_USER_NAME);
+        console.log(new Date() + ' Create user duplicate user name: ' + user_name);
         callback(result);
       } else {
         // ユーザ名が8文字以下か
@@ -123,7 +129,8 @@ RVUsersDB.prototype.createUser = (user_name, password, callback) => {
             status_code: STATUS_400_SHORT_USER_NAME
           };
 
-          console.log(STATUS_400_SHORT_USER_NAME);
+          // console.log(STATUS_400_SHORT_USER_NAME);
+          console.log(new Date() + ' Create user short user name: ' + user_name);
           callback(result);
         } else {
           // パスワードが8文字以下か
@@ -136,26 +143,29 @@ RVUsersDB.prototype.createUser = (user_name, password, callback) => {
               status_code: STATUS_400_SHORT_PASSWORD
             };
 
-            console.log(STATUS_400_SHORT_PASSWORD);
+            // console.log(STATUS_400_SHORT_PASSWORD);
+            console.log(new Date() + ' Create user short password: ' + user_name);
             callback(result);
           } else {
 
             // generate user_id
             var dateString = new Date().getTime().toString();
             var user_id = 'user_id_' + user_name + '_' + dateString;
-            console.log('user_id: ' + user_id);
+            // console.log('user_id: ' + user_id);
 
             // 新規作成クエリ
-            var createUserQuery = 'INSERT INTO returnvisitor_db.users (user_name, password, user_id, updated_at) VALUES ("?", "?", "?","?" );';
-            console.log(createUserQuery);
+            var createUserQuery = 'INSERT INTO returnvisitor_db.users (user_name, password, user_id, updated_at) VALUES (:user_name, :password, :user_id, :updated_at );';
             let dateTime = new Date().getTime().toString();
-            _client.query(createUserQuery, [user_name, password, user_id, dateTime], (err, rows) => {
+            _client.query(createUserQuery,
+              {user_name: user_name, password: password, user_id: user_id, updated_at: dateTime},
+              (err, rows) => {
               console.dir(err);
               if (rows) {
                 if (rows.info.affectedRows == 1) {
                   RVUsersDB.prototype.login(user_name, password, (result) => {
                     result.status_code = STATUS_201_CREATED;
-                    console.log(STATUS_201_CREATED);
+                    console.log(new Date() + ' Create user success: ' + user_name);
+                    // console.log(STATUS_201_CREATED);
                     callback(result);
                   });
                 }
@@ -173,20 +183,20 @@ RVUsersDB.prototype.existsUser = (user_name, callback) => {
 
   // callback(boolean)
 
-  console.log('existsUser called!');
-  var queryUserName = 'SELECT * FROM returnvisitor_db.users WHERE user_name = "?";';
-  console.log(queryUserName);
+  // console.log('existsUser called!');
+  var queryUserName = 'SELECT * FROM returnvisitor_db.users WHERE user_name = ?;';
+  // console.log(queryUserName);
   _client.query(queryUserName, [user_name], (err, rows) => {
     if (rows) {
       if (rows.info.numRows >= 1) {
-        console.log(user_name + ': Exists.');
+        // console.log(new Date() + " " + user_name + ': Exists.');
         callback(true);
       } else {
-        console.log(user_name + ': Does not Exist.');
+        // console.log(new Date() + " " + user_name + ': Does not Exist.');
         callback(false);
       }
     } else {
-      console.log(user_name + ': Does not Exist.');
+      // console.log(new Date() + " " + user_name + ': Does not Exist.');
       callback(false);
     }
   });

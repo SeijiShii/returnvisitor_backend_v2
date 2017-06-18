@@ -22,9 +22,10 @@ const STATUS_401_UNAUTHORIZED         = "STATUS_401_UNAUTHORIZED";
 const STATUS_404_NOT_FOUND            = 'STATUS_404_NOT_FOUND';
 
 const WebSocketServer = require('websocket').server;
-const https = require('https');
+// const https = require('https');
+const http = require('http');
 
-const dbclient = require('./dbclient');
+const dbclient = require('./dbclient_test');
 
 const RVUsersDB = require('./rv_users_db');
 const usersDB = new RVUsersDB(dbclient);
@@ -40,12 +41,13 @@ const ssl_server_key = './ssl.key/server.key';
 const ssl_server_crt = './ssl.key/server.crt';
 const client_crt = './ssl.key/client.crt';
 
-const options = {
-	key: fs.readFileSync(ssl_server_key),
-  cert: fs.readFileSync(ssl_server_crt)
-};
+// const options = {
+// 	key: fs.readFileSync(ssl_server_key),
+//   cert: fs.readFileSync(ssl_server_crt)
+// };
 
-const server = https.createServer(options);
+// const server = https.createServer(options);
+const server = http.createServer();
 const port = 1337;
 
 server.listen(port, function() {
@@ -67,10 +69,14 @@ wsServer.on('request', (req) => {
 
 		connection = req.accept(null, req.origin);
 
-    connection.on('message', function(message) {
+    connection.on('message', (message) => {
       if (message.type === 'utf8') {
-				let data_frame = JSON.parse(message);
-				logger.loggerAction.info('Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category);
+				// console.dir(message);
+				// console.log('message: ' + message);
+				let data_frame = JSON.parse(message.utf8Data)
+				let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category;
+				logger.loggerAction.info(logMessage);
+				console.log(new Date() + ' ' + logMessage);
 				separateOnFrameCategory(data_frame);
       }
     });
@@ -80,7 +86,7 @@ wsServer.on('request', (req) => {
     });
 });
 
-const separateOnFrameCategory(data_frame) => {
+let separateOnFrameCategory = (data_frame) => {
 	switch (data_frame.frame_category) {
 		case LOGIN_REQUEST:
 			onLoginRequest(data_frame.data_body);
@@ -107,49 +113,52 @@ const separateOnFrameCategory(data_frame) => {
 	}
 }
 
-const onLoginRequest(data_body) => {
+const onLoginRequest = (data_body) => {
 	usersDB.login(data_body.user_name, data_body.password, (result) => {
-		var response = {
+		var data_frame = {
 			frame_category: LOGIN_RESPONSE,
 			data_body: {
 				status_code: result.status_code
 			},
 			token: null
 		};
-		var jsonRes = JSON.stringify(res);
-		console.log('response: ' + jsonRes);
-		socket.send(jsonRes);
+		var jsonRes = JSON.stringify(data_frame);
+		// console.log('response: ' + jsonRes);
+		connection.sendUTF(jsonRes);
 
-		logger.loggerAction.info('Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category+ ', status_code: ' + result.status_code);
+		let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + result.status_code;
+		logger.loggerAction.info(logMessage);
+		console.log(new Date() + ' ' + logMessage);
 	});
-	break;
 }
 
-const onCreateUserRequest(dataBody) => {
+const onCreateUserRequest = (data_body) => {
 	usersDB.createUser(data_body.user_name, data_body.password, (result) => {
-		var response = {
-			frame_category: LOGIN_RESPONSE,
+		var data_frame = {
+			frame_category: CREATE_USER_RESPONSE,
 			data_body: {
 				status_code: result.status_code
 			},
 			token: null
 		};
-		var jsonRes = JSON.stringify(res);
-		console.log('response: ' + jsonRes);
-		socket.send(jsonRes);
+		var jsonRes = JSON.stringify(data_frame);
+		// console.log('response: ' + jsonRes);
+		connection.sendUTF(jsonRes);
 
-		logger.loggerAction.info('Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category+ ', status_code: ' + result.status_code);
+		let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + result.status_code;
+		logger.loggerAction.info(logMessage);
+		console.log(new Date() + ' ' + logMessage);
 	});
 }
 
-const onSyncDataRequest(dataBody) => {
+const onSyncDataRequest = (dataBody) => {
 
 }
 
-const onDeviceDataFrame(dataBody, token) => {
+const onDeviceDataFrame = (dataBody, token) => {
 
 }
 
-const onDeviceDataEndFrame(token) => {
+const onDeviceDataEndFrame = (token) => {
 
 }

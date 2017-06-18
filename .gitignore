@@ -1,5 +1,7 @@
 server_key_conoha/
+rv_backend_server_test/
 dbclient.js
+dbclient_test.js
 *.csr
 *.crt
 *.key

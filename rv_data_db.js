@@ -130,24 +130,30 @@ RVDataDB.prototype.loadDataLaterThanTime = (user_id, time, callback) => {
   // callback(loaded_rows)
   var laterDataQuery = 'SELECT * FROM returnvisitor_db.rv_data WHERE user_id = :user_id AND updated_at > :updated_at;'
 
+  let values = {
+                user_id: user_id,
+                updated_at: time
+              };
+  console.dir(values);
+
   _client.query(laterDataQuery,
-    {
-      user_id: user_id,
-      updated_at: time
-    },
+    values,
     (err, rows) => {
 
-    var loaded_rows = [];
-    for (var i = 0 ; i < rows.length ; i++ ) {
-      var row = rows[i];
-      var data = {};
-      data.id       = row.data_id;
-      data.user_id = row.user_id;
-      data.data = row.json_data;
-      data.updated_at = row.updated_at;
-      data.class_name = row.class_name;
-      loaded_rows.push(data);
-    }
+      console.dir(err);
+      console.dir(rows);
+
+      var loaded_rows = [];
+      for (var i = 0 ; i < rows.length ; i++ ) {
+        var row = rows[i];
+        var data = {};
+        data.id       = row.data_id;
+        data.user_id = row.user_id;
+        data.data = row.json_data;
+        data.updated_at = row.updated_at;
+        data.class_name = row.class_name;
+        loaded_rows.push(data);
+      }
 
     callback(loaded_rows);
   });

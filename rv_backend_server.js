@@ -118,7 +118,6 @@ wsServer.on('request', (req) => {
   }
 
   const onLoginRequest = (data_body) => {
-    lastSyncDate = data_body.last_sync_date;
   	usersDB.login(data_body.user_name, data_body.password, (result) => {
   		var data_frame = {
   			frame_category: LOGIN_RESPONSE,
@@ -147,6 +146,7 @@ wsServer.on('request', (req) => {
   }
 
   const onSyncDataRequest = (data_body) => {
+    lastSyncDate = data_body.last_sync_date;
   	usersDB.login(data_body.user_name, data_body.password, (result) => {
   		if (result.status_code === STATUS_202_AUTHENTICATED) {
   			authToken = require('./hashed_token')(result.user.user_id);
@@ -222,7 +222,7 @@ wsServer.on('request', (req) => {
   }
 
   const sendCloudData = (token) => {
-    dataDB.prototype.getDataLaterThanTime(user_id, last_sync_date, (loaded_rows) => {
+    dataDB.loadDataLaterThanTime(user_id, lastSyncDate, (loaded_rows) => {
       for ( var i = 0 ; i < loaded_rows.length ; i++ ) {
         let data_frame = {
     			frame_category: CLOUD_DATA_FRAME,
@@ -239,7 +239,7 @@ wsServer.on('request', (req) => {
         token: token
       };
       let jsonEndData = JSON.stringify(end_data_frame);
-      connection.sendUTF(jsonEndData):
+      connection.sendUTF(jsonEndData);
 
       let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + CLOUD_DATA_END_FRAME + ', Cloud data count: ' + loaded_rows.length;
     	logger.loggerAction.info(logMessage);

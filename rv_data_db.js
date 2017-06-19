@@ -4,9 +4,9 @@ function RVDataDB(client) {
   _client = client;
 }
 
-RVDataDB.prototype.changeSingleData = (user_id, data, callback) => {
+const changeSingleData = (user_id, data, callback) => {
 
-  // callback(success: boolean)
+  // callback(success: boolean, updatedData: Object)
   // データ更新日が古ければ上書き
   var changeQuery = 'UPDATE returnvisitor_db.rv_data SET class_name = :class_name , updated_at = :updated_at_0, json_data = :json_data WHERE data_id = :data_id AND user_id = :user_id AND updated_at < :updated_at_1;';
   _client.query(changeQuery,
@@ -25,88 +25,85 @@ RVDataDB.prototype.changeSingleData = (user_id, data, callback) => {
 
     if (rows) {
       if (rows.info.affectedRows == 1) {
-        callback(true);
+        callback({
+          success: true,
+          updatedData: data
+        });
       } else {
-        RVDataDB.prototype.insertSingleData(user_id, data, callback);
+        insertSingleData(user_id, data, callback);
       }
     }
   });
   _client.end();
 }
 
-RVDataDB.prototype.insertSingleData = (user_id, data, callback) => {
+const insertSingleData = (user_id, data, callback) => {
 
   var insertQuery = 'INSERT INTO returnvisitor_db.rv_data (user_id, data_id, class_name, updated_at, json_data) VALUES (:user_id, :data_id, :class_name, :updated_at, :json_data );';
   _client.query(insertQuery,
-    {
-      user_id: user_id,
-      data_id: data.id,
-      class_name: data.class_name,
-      updated_at: data.updated_at,
-      json_data: data.data
-    },
-    (err, rows) => {
+  {
+    user_id: user_id,
+    data_id: data.id,
+    class_name: data.class_name,
+    updated_at: data.updated_at,
+    json_data: data.data
+  },
+  (err, rows) => {
+
+    // console.dir(rows);
+    // console.dir(err);
+
     if (rows) {
       if (rows.info.affectedRows == 1) {
-        callback(true);
+        callback({
+          success: true,
+          updatedData: data
+        });
       } else {
-        callback(false);
+        callback({
+          success: false,
+          updatedData: data
+        });
       }
     }
   });
   _client.end();
 };
 
-RVDataDB.prototype.saveSingleData = (user_id, data, callback) => {
+const saveSingleData = (user_id, data, callback) => {
 
   // console.log('saveSingleData called.');
 
-  RVDataDB.prototype.changeSingleData(user_id, data, callback);
+  changeSingleData(user_id, data, callback);
 
 }
 
-RVDataDB.prototype.saveDataArray = (user_id, array, callback) => {
+RVDataDB.prototype.saveDataArray = (user_id, array) => {
   // callback(result)
   // console.log('saveDataArray called.');
   // console.dir(array);
 
-  var updatedDataCount = 0;
   for ( var i = 0 ; i < array.length ; i++ ) {
-    RVDataDB.prototype.saveSingleData(user_id, array[i], (result) => {
-      if (result) {
-        updatedDataCount++;
+    saveSingleData(user_id, array[i], (result) => {
+      // console.log('saveSingleData.result.success: ' + result.success);
+
+      if (result.updatedData.class_name === 'DeletedData') {
+        var deletedData = result.updatedData;
+        var dataString = JSON.stringify(deletedData.data);
+        // console.log('dataString: ' + dataString);
+        dataString = dataString.replace(/\*double_quotes\*/g, '"');
+        // console.log('dataString (replaced): ' + dataString);
+        var parsedData = JSON.parse(dataString);
+
+        deleteSingleData(user_id, parsedData.id, (success) => {
+          // console.log('deleteSingleData.success: ' + success);
+        });
       }
     });
   }
-
-  var deletedDataCount = 0;
-  for ( var i = 0 ; i < array.length ; i++ ) {
-    if (array[i].class_name === 'DeletedData') {
-      var deletedData = array[i];
-      var dataString = deletedData.data;
-      // console.log('dataString: ' + dataString);
-      dataString = dataString.replace(/\*double_quotes\*/g, '"');
-      // console.log('dataString (replaced): ' + dataString);
-      var parsedData = JSON.parse(dataString);
-
-      RVDataDB.prototype.deleteSingleData(user_id, parsedData.data_id, (result) => {
-        if (result) {
-          deletedDataCount++;
-        }
-      })
-    }
-  }
-
-  var result = {
-    updatedDataCount: updatedDataCount,
-    deletedDataCount: deletedDataCount
-  }
-  // console.dir(result);
-  callback(result);
-
 }
 
-RVDataDB.prototype.deleteSingleData = (user_id, data_id, callback) => {
+const deleteSingleData = (user_id, data_id, callback) => {
   var deleteDataQuery = 'DELETE FROM returnvisitor_db.rv_data WHERE user_id = :user_id AND data_id = :data_id;';
   _client.query(deleteDataQuery,
     {

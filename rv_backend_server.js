@@ -65,141 +65,186 @@ const wsServer = new WebSocketServer({
     autoAcceptConnections: false
 });
 
-var connection;
-var authToken;
+
 wsServer.on('request', (req) => {
 
-		connection = req.accept(null, req.origin);
+  var authToken;
+  var user_id;
+  var lastSyncDate;
+  var deviceDataArray = [];
+	let connection = req.accept(null, req.origin);
 
-    connection.on('message', (message) => {
-      if (message.type === 'utf8') {
-				// console.dir(message);
-				// console.log('message: ' + message);
-				let data_frame = JSON.parse(message.utf8Data)
-				let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category;
-				logger.loggerAction.info(logMessage);
-				console.log(new Date() + ' ' + logMessage);
-				separateOnFrameCategory(data_frame);
+  connection.on('message', (message) => {
+    if (message.type === 'utf8') {
+			// console.dir(message);
+			// console.log('message: ' + message);
+			let data_frame = JSON.parse(message.utf8Data)
+			let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category;
+			logger.loggerAction.info(logMessage);
+			console.log(new Date() + ' ' + logMessage);
+			separateOnFrameCategory(data_frame);
+    }
+  });
+
+  connection.on('close', (reasonCode, description) => {
+      console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.');
+  });
+
+  let separateOnFrameCategory = (data_frame) => {
+  	switch (data_frame.frame_category) {
+  		case LOGIN_REQUEST:
+  			onLoginRequest(data_frame.data_body);
+  			break;
+
+  		case CREATE_USER_REQUEST:
+  			onCreateUserRequest(data_frame.data_body);
+  			break;
+
+  		case SYNC_DATA_REQUEST:
+  			onSyncDataRequest(data_frame.data_body);
+  			break;
+
+  		case DEVICE_DATA_FRAME:
+  			onDeviceDataFrame(data_frame.data_body, data_frame.token);
+  			break;
+
+  		case DEVICE_DATA_END_FRAME:
+  			onDeviceDataEndFrame(data_frame.token);
+  			break;
+
+  		default:
+
+  	}
+  }
+
+  const onLoginRequest = (data_body) => {
+    lastSyncDate = data_body.last_sync_date;
+  	usersDB.login(data_body.user_name, data_body.password, (result) => {
+  		var data_frame = {
+  			frame_category: LOGIN_RESPONSE,
+  			data_body: {
+  				status_code: result.status_code
+  			},
+  			token: null
+  		};
+
+  		sendDataFrame(data_frame);
+  	});
+  }
+
+  const onCreateUserRequest = (data_body) => {
+  	usersDB.createUser(data_body.user_name, data_body.password, (result) => {
+  		var data_frame = {
+  			frame_category: CREATE_USER_RESPONSE,
+  			data_body: {
+  				status_code: result.status_code
+  			},
+  			token: null
+  		};
+
+  		sendDataFrame(data_frame)
+  	});
+  }
+
+  const onSyncDataRequest = (data_body) => {
+  	usersDB.login(data_body.user_name, data_body.password, (result) => {
+  		if (result.status_code === STATUS_202_AUTHENTICATED) {
+  			authToken = require('./hashed_token')(result.user.user_id);
+  			user_id = result.user.user_id;
+  			var data_frame = {
+  				frame_category: SYNC_DATA_RESPONSE,
+  				data_body: {
+  					status_code: STATUS_200_SYNC_START_OK
+  				},
+  				token: authToken
+  			};
+  			sendDataFrame(data_frame);
+
+  		} else {
+  			var data_frame = {
+  				frame_category: SYNC_DATA_RESPONSE,
+  				data_body: {
+  					status_code: result.status_code
+  				},
+  				token: null
+  			};
+  			sendDataFrame(data_frame);
+
+  		}
+  	});
+  }
+
+  const onDeviceDataFrame = (data_body, token) => {
+  	if (token === authToken) {
+  		deviceDataArray.push(data_body);
+  	} else {
+  		var data_frame = {
+  			frame_category: SYNC_DATA_RESPONSE,
+  			data_body: {
+  				status_code: STATUS_401_UNAUTHORIZED
+  			},
+  			token: null
+  		};
+  		sendDataFrame(data_frame);
+  	}
+  }
+
+  const onDeviceDataEndFrame = (token) => {
+  	if (token === authToken) {
+      dataDB.saveDataArray(user_id, deviceDataArray);
+      let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + DEVICE_DATA_END_FRAME + ', Device data count: ' + deviceDataArray.length;
+    	logger.loggerAction.info(logMessage);
+    	console.log(new Date() + ' ' + logMessage);
+
+      // todo ここからクラウド側のデータの伝送を始める
+      sendCloudData(token);
+
+  	} else {
+  		var data_frame = {
+  			frame_category: SYNC_DATA_RESPONSE,
+  			data_body: {
+  				status_code: STATUS_401_UNAUTHORIZED
+  			},
+  			token: null
+  		};
+  		sendDataFrame(data_frame);
+  	}
+  }
+
+  const sendDataFrame = (data_frame) => {
+  	var jsonRes = JSON.stringify(data_frame);
+  	// console.log('response: ' + jsonRes);
+  	connection.sendUTF(jsonRes);
+
+  	let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + data_frame.data_body.status_code;
+  	logger.loggerAction.info(logMessage);
+  	console.log(new Date() + ' ' + logMessage);
+  }
+
+  const sendCloudData = (token) => {
+    dataDB.prototype.getDataLaterThanTime(user_id, last_sync_date, (loaded_rows) => {
+      for ( var i = 0 ; i < loaded_rows.length ; i++ ) {
+        let data_frame = {
+    			frame_category: CLOUD_DATA_FRAME,
+    			data_body: loaded_rows[i],
+    			token: token
+    		};
+        let jsonData = JSON.stringify(data_frame);
+        connection.sendUTF(jsonData);
       }
-    });
 
-    connection.on('close', (reasonCode, description) => {
-        console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.');
+      let end_data_frame = {
+        frame_category: CLOUD_DATA_END_FRAME,
+        data_body: loaded_rows[i],
+        token: token
+      };
+      let jsonEndData = JSON.stringify(end_data_frame);
+      connection.sendUTF(jsonEndData):
+
+      let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + CLOUD_DATA_END_FRAME + ', Cloud data count: ' + loaded_rows.length;
+    	logger.loggerAction.info(logMessage);
+    	console.log(new Date() + ' ' + logMessage);
     });
+  }
+
 });
-
-let separateOnFrameCategory = (data_frame) => {
-	switch (data_frame.frame_category) {
-		case LOGIN_REQUEST:
-			onLoginRequest(data_frame.data_body);
-			break;
-
-		case CREATE_USER_REQUEST:
-			onCreateUserRequest(data_frame.data_body);
-			break;
-
-		case SYNC_DATA_REQUEST:
-			onSyncDataRequest(data_frame.data_body);
-			break;
-
-		case DEVICE_DATA_FRAME:
-			onDevicedata_frame(data_frame.data_body, data_frame.token);
-			break;
-
-		case DEVICE_DATA_END_FRAME:
-			onDeviceDataEndFrame(data_frame.token);
-			break;
-
-		default:
-
-	}
-}
-
-const onLoginRequest = (data_body) => {
-	usersDB.login(data_body.user_name, data_body.password, (result) => {
-		var data_frame = {
-			frame_category: LOGIN_RESPONSE,
-			data_body: {
-				status_code: result.status_code
-			},
-			token: null
-		};
-
-		sendDataFrame(data_frame);
-
-		// var jsonRes = JSON.stringify(data_frame);
-		// // console.log('response: ' + jsonRes);
-		// connection.sendUTF(jsonRes);
-		//
-		// let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + result.status_code;
-		// logger.loggerAction.info(logMessage);
-		// console.log(new Date() + ' ' + logMessage);
-	});
-}
-
-const onCreateUserRequest = (data_body) => {
-	usersDB.createUser(data_body.user_name, data_body.password, (result) => {
-		var data_frame = {
-			frame_category: CREATE_USER_RESPONSE,
-			data_body: {
-				status_code: result.status_code
-			},
-			token: null
-		};
-
-		sendDataFrame(data_frame)
-
-		// var jsonRes = JSON.stringify(data_frame);
-		// // console.log('response: ' + jsonRes);
-		// connection.sendUTF(jsonRes);
-		//
-		// let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + result.status_code;
-		// logger.loggerAction.info(logMessage);
-		// console.log(new Date() + ' ' + logMessage);
-	});
-}
-
-const onSyncDataRequest = (data_body) => {
-	usersDB.login(data_body.user_name, data_body.password, (result) => {
-		if (result.status_code === STATUS_202_AUTHENTICATED) {
-			authToken = require('./hashed_token')(result.user.user_id);
-			var data_frame = {
-				frame_category: SYNC_DATA_RESPONSE,
-				data_body: {
-					status_code: STATUS_200_SYNC_START_OK
-				},
-				token: authToken
-			};
-			sendDataFrame(data_frame);
-
-		} else {
-			var data_frame = {
-				frame_category: SYNC_DATA_RESPONSE,
-				data_body: {
-					status_code: result.status_code
-				},
-				token: null
-			};
-			sendDataFrame(data_frame);
-
-		}
-	});
-}
-
-const onDeviceDataFrame = (data_body, token) => {
-
-}
-
-const onDeviceDataEndFrame = (data_body) => {
-
-}
-
-const sendDataFrame = (data_frame) => {
-	var jsonRes = JSON.stringify(data_frame);
-	// console.log('response: ' + jsonRes);
-	connection.sendUTF(jsonRes);
-
-	let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + data_frame.data_body.status_code;
-	logger.loggerAction.info(logMessage);
-	console.log(new Date() + ' ' + logMessage);
-}

@@ -14,6 +14,7 @@ const	CLOUD_DATA_END_FRAME 	= 'CLOUD_DATA_END_FRAME';
 
 // RVResponseBody: StatusCode
 const STATUS_200_SYNC_START_OK 				= 'STATUS_200_SYNC_START_OK';
+const STATUS_200_SYNC_END_OK 					= 'STATUS_200_SYNC_END_OK';
 const STATUS_201_CREATED              = 'STATUS_201_CREATED';
 const STATUS_202_AUTHENTICATED        = 'STATUS_202_AUTHENTICATED';
 const STATUS_400_DUPLICATE_USER_NAME  = 'STATUS_400_DUPLICATE_USER_NAME';
@@ -23,10 +24,10 @@ const STATUS_401_UNAUTHORIZED         = 'STATUS_401_UNAUTHORIZED';
 const STATUS_404_NOT_FOUND            = 'STATUS_404_NOT_FOUND';
 
 const WebSocketServer = require('websocket').server;
-// const https = require('https');
-const http = require('http');
+const https = require('https');
+// const http = require('http');
 
-const dbclient = require('./dbclient_test');
+const dbclient = require('./dbclient');
 
 const RVUsersDB = require('./rv_users_db');
 const usersDB = new RVUsersDB(dbclient);
@@ -42,13 +43,13 @@ const ssl_server_key = './ssl.key/server.key';
 const ssl_server_crt = './ssl.key/server.crt';
 const client_crt = './ssl.key/client.crt';
 
-// const options = {
-// 	key: fs.readFileSync(ssl_server_key),
-//   cert: fs.readFileSync(ssl_server_crt)
-// };
+const options = {
+	key: fs.readFileSync(ssl_server_key),
+  cert: fs.readFileSync(ssl_server_crt)
+};
 
-// const server = https.createServer(options);
-const server = http.createServer();
+const server = https.createServer(options);
+// const server = http.createServer();
 const port = 1337;
 
 server.listen(port, function() {
@@ -69,47 +70,50 @@ const wsServer = new WebSocketServer({
 wsServer.on('request', (req) => {
 
   var authToken;
-  var user_id;
+  var userId;
   var lastSyncDate;
   var deviceDataArray = [];
 	let connection = req.accept(null, req.origin);
+	let logMessage = 'Remote Address: ' + connection.remoteAddress + ', Connected.';
+	logger.loggerAction.info(logMessage);
+	console.log(new Date() + ' ' + logMessage);
 
   connection.on('message', (message) => {
     if (message.type === 'utf8') {
-			// console.dir(message);
-			// console.log('message: ' + message);
-			let data_frame = JSON.parse(message.utf8Data)
-			let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category;
+			let dataFrame = JSON.parse(message.utf8Data)
+			let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + dataFrame.frameCategory;
 			logger.loggerAction.info(logMessage);
 			console.log(new Date() + ' ' + logMessage);
-			separateOnFrameCategory(data_frame);
+			separateOnFrameCategory(dataFrame);
     }
   });
 
   connection.on('close', (reasonCode, description) => {
-      console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.');
+			let logMessage = 'Remote Address: ' + connection.remoteAddress + ' disconnected.';
+			logger.loggerAction.info(logMessage);
+			console.log(new Date() + ' ' + logMessage);
   });
 
-  let separateOnFrameCategory = (data_frame) => {
-  	switch (data_frame.frame_category) {
+  let separateOnFrameCategory = (dataFrame) => {
+  	switch (dataFrame.frameCategory) {
   		case LOGIN_REQUEST:
-  			onLoginRequest(data_frame.data_body);
+  			onLoginRequest(dataFrame.dataBody);
   			break;
 
   		case CREATE_USER_REQUEST:
-  			onCreateUserRequest(data_frame.data_body);
+  			onCreateUserRequest(dataFrame.dataBody);
   			break;
 
   		case SYNC_DATA_REQUEST:
-  			onSyncDataRequest(data_frame.data_body);
+  			onSyncDataRequest(dataFrame.dataBody);
   			break;
 
   		case DEVICE_DATA_FRAME:
-  			onDeviceDataFrame(data_frame.data_body, data_frame.token);
+  			onDeviceDataFrame(dataFrame.dataBody, dataFrame.token);
   			break;
 
   		case DEVICE_DATA_END_FRAME:
-  			onDeviceDataEndFrame(data_frame.token);
+  			onDeviceDataEndFrame(dataFrame.token);
   			break;
 
   		default:
@@ -117,81 +121,121 @@ wsServer.on('request', (req) => {
   	}
   }
 
-  const onLoginRequest = (data_body) => {
-  	usersDB.login(data_body.user_name, data_body.password, (result) => {
-  		var data_frame = {
-  			frame_category: LOGIN_RESPONSE,
-  			data_body: {
-  				status_code: result.status_code
-  			},
-  			token: null
-  		};
+  const onLoginRequest = (dataBody) => {
+    dataBody = JSON.parse(dataBody);
+  	usersDB.login(dataBody.userName, dataBody.password, (result) => {
 
-  		sendDataFrame(data_frame);
+      if (result.statusCode = STATUS_202_AUTHENTICATED) {
+        var dataFrame = {
+          frameCategory: LOGIN_RESPONSE,
+          dataBody: JSON.stringify({
+            statusCode: result.statusCode,
+            userName: result.user.userName,
+            password: result.user.password
+          }),
+          token: null
+        };
+        sendDataFrame(dataFrame, STATUS_202_AUTHENTICATED);
+      } else {
+        var dataFrame = {
+          frameCategory: LOGIN_RESPONSE,
+          dataBody: JSON.stringify({
+            statusCode: result.statusCode,
+            userName: result.user.userName,
+            password: null
+          }),
+          token: null
+        };
+        sendDataFrame(dataFrame, result.statusCode);
+      }
+
+
   	});
   }
 
-  const onCreateUserRequest = (data_body) => {
-  	usersDB.createUser(data_body.user_name, data_body.password, (result) => {
-  		var data_frame = {
-  			frame_category: CREATE_USER_RESPONSE,
-  			data_body: {
-  				status_code: result.status_code
-  			},
-  			token: null
-  		};
+  const onCreateUserRequest = (dataBody) => {
+    dataBody = JSON.parse(dataBody);
+  	usersDB.createUser(dataBody.userName, dataBody.password, (result) => {
+      if (result.statusCode == STATUS_201_CREATED) {
+        var dataFrame = {
+          frameCategory: CREATE_USER_RESPONSE,
+          dataBody: JSON.stringify({
+            statusCode: result.statusCode,
+            userName: dataBody.userName,
+            password: result.user.password
+          }),
+          token: null
+        };
 
-  		sendDataFrame(data_frame)
+        sendDataFrame(dataFrame, result.statusCode)
+      } else {
+        var dataFrame = {
+          frameCategory: CREATE_USER_RESPONSE,
+          dataBody: JSON.stringify({
+            statusCode: result.statusCode,
+            userName: dataBody.userName,
+            password: null
+          }),
+          token: null
+        };
+
+        sendDataFrame(dataFrame, result.statusCode)
+      }
+
   	});
   }
 
-  const onSyncDataRequest = (data_body) => {
-    lastSyncDate = data_body.last_sync_date;
-  	usersDB.login(data_body.user_name, data_body.password, (result) => {
-  		if (result.status_code === STATUS_202_AUTHENTICATED) {
-  			authToken = require('./hashed_token')(result.user.user_id);
-  			user_id = result.user.user_id;
-  			var data_frame = {
-  				frame_category: SYNC_DATA_RESPONSE,
-  				data_body: {
-  					status_code: STATUS_200_SYNC_START_OK
-  				},
+  const onSyncDataRequest = (dataBody) => {
+    dataBody = JSON.parse(dataBody);
+    lastSyncDate = dataBody.lastSyncDate;
+  	usersDB.login(dataBody.userName, dataBody.password, (result) => {
+  		if (result.statusCode === STATUS_202_AUTHENTICATED) {
+  			authToken = require('./hashed_token')(result.user.userId);
+  			userId = result.user.userId;
+  			var dataFrame = {
+  				frameCategory: SYNC_DATA_RESPONSE,
+  				dataBody: JSON.stringify({
+  					statusCode: STATUS_200_SYNC_START_OK,
+            userName: dataBody.userName
+  				}),
   				token: authToken
   			};
-  			sendDataFrame(data_frame);
+  			sendDataFrame(dataFrame, STATUS_200_SYNC_START_OK);
 
   		} else {
-  			var data_frame = {
-  				frame_category: SYNC_DATA_RESPONSE,
-  				data_body: {
-  					status_code: result.status_code
-  				},
+  			var dataFrame = {
+  				frameCategory: SYNC_DATA_RESPONSE,
+  				dataBody: JSON.stringify({
+  					statusCode: result.statusCode,
+            userName: dataBody.userName
+  				}),
   				token: null
   			};
-  			sendDataFrame(data_frame);
+  			sendDataFrame(dataFrame, result.statusCode);
 
   		}
   	});
   }
 
-  const onDeviceDataFrame = (data_body, token) => {
+  const onDeviceDataFrame = (dataBody, token) => {
   	if (token === authToken) {
-  		deviceDataArray.push(data_body);
+			let data = JSON.parse(dataBody)
+  		deviceDataArray.push(data);
   	} else {
-  		var data_frame = {
-  			frame_category: SYNC_DATA_RESPONSE,
-  			data_body: {
-  				status_code: STATUS_401_UNAUTHORIZED
-  			},
+  		var dataFrame = {
+  			frameCategory: SYNC_DATA_RESPONSE,
+  			dataBody: JSON.stringify({
+  				statusCode: STATUS_401_UNAUTHORIZED
+  			}),
   			token: null
   		};
-  		sendDataFrame(data_frame);
+  		sendDataFrame(dataFrame, STATUS_401_UNAUTHORIZED);
   	}
   }
 
   const onDeviceDataEndFrame = (token) => {
   	if (token === authToken) {
-      dataDB.saveDataArray(user_id, deviceDataArray);
+      dataDB.saveDataArray(userId, deviceDataArray);
       let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + DEVICE_DATA_END_FRAME + ', Device data count: ' + deviceDataArray.length;
     	logger.loggerAction.info(logMessage);
     	console.log(new Date() + ' ' + logMessage);
@@ -200,48 +244,53 @@ wsServer.on('request', (req) => {
       sendCloudData(token);
 
   	} else {
-  		var data_frame = {
-  			frame_category: SYNC_DATA_RESPONSE,
-  			data_body: {
-  				status_code: STATUS_401_UNAUTHORIZED
-  			},
+  		var dataFrame = {
+  			frameCategory: SYNC_DATA_RESPONSE,
+  			dataBody: JSON.stringify({
+  				statusCode: STATUS_401_UNAUTHORIZED
+  			}),
   			token: null
   		};
-  		sendDataFrame(data_frame);
+  		sendDataFrame(dataFrame, STATUS_401_UNAUTHORIZED);
   	}
   }
 
-  const sendDataFrame = (data_frame) => {
-  	var jsonRes = JSON.stringify(data_frame);
+  const sendDataFrame = (dataFrame, statusCode) => {
+  	var jsonRes = JSON.stringify(dataFrame);
   	// console.log('response: ' + jsonRes);
   	connection.sendUTF(jsonRes);
 
-  	let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + data_frame.frame_category + ', status_code: ' + data_frame.data_body.status_code;
+  	let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + dataFrame.frameCategory + ', statusCode: ' + statusCode;
   	logger.loggerAction.info(logMessage);
   	console.log(new Date() + ' ' + logMessage);
   }
 
   const sendCloudData = (token) => {
-    dataDB.loadDataLaterThanTime(user_id, lastSyncDate, (loaded_rows) => {
-      for ( var i = 0 ; i < loaded_rows.length ; i++ ) {
-        let data_frame = {
-    			frame_category: CLOUD_DATA_FRAME,
-    			data_body: loaded_rows[i],
+    dataDB.loadDataLaterThanTime(userId, lastSyncDate, (loadedRows) => {
+
+      for ( var i = 0 ; i < loadedRows.length ; i++ ) {
+        let dataFrame = {
+    			frameCategory: CLOUD_DATA_FRAME,
+    			dataBody: JSON.stringify(loadedRows[i]),
     			token: token
     		};
-        let jsonData = JSON.stringify(data_frame);
+        let jsonData = JSON.stringify(dataFrame);
         connection.sendUTF(jsonData);
       }
 
-      let end_data_frame = {
-        frame_category: CLOUD_DATA_END_FRAME,
-        data_body: loaded_rows[i],
+      let endDataFrame = {
+        frameCategory: CLOUD_DATA_END_FRAME,
+        dataBody: JSON.stringify({
+					statusCode: STATUS_200_SYNC_END_OK,
+					userName: null,
+					password: null
+				}),
         token: token
       };
-      let jsonEndData = JSON.stringify(end_data_frame);
+      let jsonEndData = JSON.stringify(endDataFrame);
       connection.sendUTF(jsonEndData);
 
-      let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + CLOUD_DATA_END_FRAME + ', Cloud data count: ' + loaded_rows.length;
+      let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + CLOUD_DATA_END_FRAME + ', Cloud data count: ' + loadedRows.length;
     	logger.loggerAction.info(logMessage);
     	console.log(new Date() + ' ' + logMessage);
     });

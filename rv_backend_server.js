@@ -12,6 +12,9 @@ const	DEVICE_DATA_END_FRAME = 'DEVICE_DATA_END_FRAME';
 const	CLOUD_DATA_FRAME 			= 'CLOUD_DATA_FRAME';
 const	CLOUD_DATA_END_FRAME 	= 'CLOUD_DATA_END_FRAME';
 
+const	AUTH_LOGIN_REQUEST 	  = 'AUTH_LOGIN_REQUEST';
+const	AUTH_LOGIN_RESPONSE   = 'AUTH_LOGIN_RESPONSE';
+
 // RVResponseBody: StatusCode
 const STATUS_200_SYNC_START_OK 				= 'STATUS_200_SYNC_START_OK';
 const STATUS_200_SYNC_END_OK 					= 'STATUS_200_SYNC_END_OK';
@@ -24,10 +27,10 @@ const STATUS_401_UNAUTHORIZED         = 'STATUS_401_UNAUTHORIZED';
 const STATUS_404_NOT_FOUND            = 'STATUS_404_NOT_FOUND';
 
 const WebSocketServer = require('websocket').server;
-const https = require('https');
-// const http = require('http');
+//const https = require('https');
+ const http = require('http');
 
-const dbclient = require('./dbclient');
+const dbclient = require('./dbclient_test');
 
 const RVUsersDB = require('./rv_users_db');
 const usersDB = new RVUsersDB(dbclient);
@@ -39,17 +42,17 @@ const websocket = require("websocket");
 const fs = require('fs');
 const logger = require('./logger');
 
-const ssl_server_key = './ssl.key/server.key';
-const ssl_server_crt = './ssl.key/server.crt';
-const client_crt = './ssl.key/client.crt';
+//const ssl_server_key = './ssl.key/server.key';
+//const ssl_server_crt = './ssl.key/server.crt';
+//const client_crt = './ssl.key/client.crt';
 
-const options = {
-	key: fs.readFileSync(ssl_server_key),
-  cert: fs.readFileSync(ssl_server_crt)
-};
+//const options = {
+//	key: fs.readFileSync(ssl_server_key),
+//  cert: fs.readFileSync(ssl_server_crt)
+//};
 
-const server = https.createServer(options);
-// const server = http.createServer();
+//const server = https.createServer(options);
+ const server = http.createServer();
 const port = 1337;
 
 server.listen(port, function() {
@@ -95,6 +98,7 @@ wsServer.on('request', (req) => {
   });
 
   let separateOnFrameCategory = (dataFrame) => {
+      
   	switch (dataFrame.frameCategory) {
   		case LOGIN_REQUEST:
   			onLoginRequest(dataFrame.dataBody);
@@ -115,6 +119,10 @@ wsServer.on('request', (req) => {
   		case DEVICE_DATA_END_FRAME:
   			onDeviceDataEndFrame(dataFrame.token);
   			break;
+            
+        case AUTH_LOGIN_REQUEST:
+            onAuthLoginRequest(dataFrame.dataBody);
+            break;
 
   		default:
 
@@ -125,7 +133,7 @@ wsServer.on('request', (req) => {
     dataBody = JSON.parse(dataBody);
   	usersDB.login(dataBody.userName, dataBody.password, (result) => {
 
-      if (result.statusCode = STATUS_202_AUTHENTICATED) {
+      if (result.statusCode == STATUS_202_AUTHENTICATED) {
         var dataFrame = {
           frameCategory: LOGIN_RESPONSE,
           dataBody: JSON.stringify({
@@ -151,6 +159,44 @@ wsServer.on('request', (req) => {
 
 
   	});
+  }
+  
+  const onAuthLoginRequest = (dataBody) => {
+      
+      console.log('dataBody');
+      console.dir(dataBody);
+      
+//      dataBody = JSON.parse(dataBody);
+      
+//      console.log('dataBody');
+//      console.dir(dataBody);
+            
+      usersDB.loginWithAuthToken(dataBody.authToken, (result) => {
+      
+          if (result.statusCode == STATUS_202_AUTHENTICATED
+              || result.statusCode == STATUS_201_CREATED) {
+            var dataFrame = {
+              frameCategory: AUTH_LOGIN_RESPONSE,
+              dataBody: JSON.stringify({
+                  statusCode: result.statusCode,
+                  authToken: result.authToken
+              }),
+              token: null
+            };
+            sendDataFrame(dataFrame, STATUS_202_AUTHENTICATED);
+          } else {
+            var dataFrame = {
+              frameCategory: AUTH_LOGIN_RESPONSE,
+              dataBody: JSON.stringify({
+                statusCode: result.statusCode,
+              }),
+              token: null
+            };
+            console.log('dataFrame:')
+            console.dir(dataFrame);
+            sendDataFrame(dataFrame, result.statusCode);
+          }
+      });
   }
 
   const onCreateUserRequest = (dataBody) => {

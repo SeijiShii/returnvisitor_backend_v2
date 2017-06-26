@@ -32,7 +32,7 @@ RVUsersDB.prototype.login = (userName, password, callback) => {
 //   console.dir(rows);
 // });
 
-  var queryUser = 'SELECT * FROM returnvisitor_db.users WHERE user_name = :userName AND password = :password ;';
+  let queryUser = 'SELECT * FROM returnvisitor_db.users WHERE user_name = :userName AND password = :password ;';
   _client.query(queryUser,
     {userName: userName, password: password},
     (err, rows) => {
@@ -197,4 +197,61 @@ RVUsersDB.prototype.existsUser = (userName, callback) => {
   _client.end();
 }
 
+RVUsersDB.prototype.loginWithAuthToken = (authToken, callback) => {
+    
+    let authTokenQuery = 'SELECT * FROM returnvisitor_db.users WHERE auth_token = :authToken ;';
+    _client.query(authTokenQuery,
+                 {authToken: authToken},
+                 (err, rows) => {
+        if (rows.info.numRows == 1) {
+            let result = {
+                statusCode: STATUS_202_AUTHENTICATED,
+                userId: rows[0].auth_token
+            }
+            console.log(new Date() + ' Login, found authToken: ' + authToken);
+            callback(result);
+        } else if (rows.info.numRows <= 0) {
+        
+            console.log(new Date() + ' Login, not found authToken: ' + authToken);
+            console.log(new Date() + ' Creating user with authToken: ' + authToken);
+            createUserWithAuthToken(authToken, callback);
+        }
+    });
+    _client.end();
+}
+
+const createUserWithAuthToken = (authToken, callback) => {
+    // generate userId
+    var dateString = new Date().getTime().toString();
+    var userId = 'user_id_' + authToken + '_' + dateString;
+
+    // 新規作成クエリ
+    var createUserQuery = 'INSERT INTO returnvisitor_db.users (auth_token, user_id, updated_at) VALUES (:authToken, :userId, :updated_at );';
+    let dateTime = new Date().getTime().toString();
+    _client.query(createUserQuery,
+      {
+        authToken: authToken,
+        userId: userId, 
+        updated_at: dateTime},
+      (err, rows) => {
+       console.dir(err);
+      if (rows) {
+        if (rows.info.affectedRows == 1) {
+            
+            console.log('rows')
+            console.dir(rows);
+            
+            // 再帰的に呼び出してログインを完了させる。
+            loginWithAuthToken(authToken, callback);    
+        }
+      }
+    });
+    _client.end();
+}
+
+RVUsersDB.prototype.updateAuthToken = (oldAuthToken, newAuthToken, callback) => {
+    
+}
+
 module.exports = RVUsersDB;
+    

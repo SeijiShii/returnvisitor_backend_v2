@@ -11,22 +11,22 @@ const	DEVICE_DATA_FRAME 		= 'DEVICE_DATA_FRAME';
 const	DEVICE_DATA_END_FRAME = 'DEVICE_DATA_END_FRAME';
 const	CLOUD_DATA_FRAME 			= 'CLOUD_DATA_FRAME';
 const	CLOUD_DATA_END_FRAME 	= 'CLOUD_DATA_END_FRAME';
+const AUTH_TOKEN_UPDATE_REQUEST = 'AUTH_TOKEN_UPDATE_REQUEST';
+const AUTH_TOKEN_UPDATE_RESPONSE = 'AUTH_TOKEN_UPDATE_RESPONSE';
 
-const	AUTH_LOGIN_REQUEST 	  = 'AUTH_LOGIN_REQUEST';
-const	AUTH_LOGIN_RESPONSE   = 'AUTH_LOGIN_RESPONSE';
-const	AUTH_SYNC_DATA_REQUEST   = 'AUTH_SYNC_DATA_REQUEST';
-const	AUTH_SYNC_DATA_RESPONSE  = 'AUTH_SYNC_DATA_RESPONSE';
-
-// RVResponseBody: StatusCode
+// RVCloudSyndDataFrame: StatusCode
+const STATUS_200_AUTH_TOKEN_UPDATED   = 'STATUS_200_AUTH_TOKEN_UPDATED';
 const STATUS_200_SYNC_START_OK 		   	= 'STATUS_200_SYNC_START_OK';
-const STATUS_200_SYNC_END_OK			= 'STATUS_200_SYNC_END_OK';
-const STATUS_201_CREATED              	= 'STATUS_201_CREATED';
-const STATUS_202_AUTHENTICATED        	= 'STATUS_202_AUTHENTICATED';
-const STATUS_400_DUPLICATE_USER_NAME  	= 'STATUS_400_DUPLICATE_USER_NAME';
-const STATUS_400_SHORT_USER_NAME      	= 'STATUS_400_SHORT_USER_NAME';
-const STATUS_400_SHORT_PASSWORD       	= 'STATUS_400_SHORT_PASSWORD';
-const STATUS_401_UNAUTHORIZED         	= 'STATUS_401_UNAUTHORIZED';
-const STATUS_404_NOT_FOUND            	= 'STATUS_404_NOT_FOUND';
+const STATUS_200_SYNC_END_OK			    = 'STATUS_200_SYNC_END_OK';
+const STATUS_201_CREATED              = 'STATUS_201_CREATED';
+const STATUS_202_AUTHENTICATED        = 'STATUS_202_AUTHENTICATED';
+const STATUS_204_NO_AUTH_TOKEN        = 'STATUS_204_NO_AUTH_TOKEN';
+const STATUS_400_DUPLICATE_USER_NAME  = 'STATUS_400_DUPLICATE_USER_NAME';
+const STATUS_400_SHORT_USER_NAME      = 'STATUS_400_SHORT_USER_NAME';
+const STATUS_400_SHORT_PASSWORD       = 'STATUS_400_SHORT_PASSWORD';
+const STATUS_400_WRONG_ARGS           = 'STATUS_400_WRONG_ARGS';
+const STATUS_401_UNAUTHORIZED         = 'STATUS_401_UNAUTHORIZED';
+const STATUS_404_NOT_FOUND            = 'STATUS_404_NOT_FOUND';
 
 const WebSocketServer = require('websocket').server;
 //const https = require('https');
@@ -74,10 +74,10 @@ const wsServer = new WebSocketServer({
 
 wsServer.on('request', (req) => {
 
-  var authToken;
-  var userId;
-  var lastSyncDate;
-  var deviceDataArray = [];
+  let serverAuthToken;
+  let userId;
+  let lastSyncDate;
+  let deviceDataArray = [];
 	let connection = req.accept(null, req.origin);
 	let logMessage = 'Remote Address: ' + connection.remoteAddress + ', Connected.';
 	logger.loggerAction.info(logMessage);
@@ -103,242 +103,241 @@ wsServer.on('request', (req) => {
       
   	switch (dataFrame.frameCategory) {
   		case LOGIN_REQUEST:
-  			onLoginRequest(dataFrame.dataBody);
+  			onLoginRequest(dataFrame);
   			break;
 
   		case CREATE_USER_REQUEST:
-  			onCreateUserRequest(dataFrame.dataBody);
+  			onCreateUserRequest(dataFrame);
   			break;
 
   		case SYNC_DATA_REQUEST:
-  			onSyncDataRequest(dataFrame.dataBody);
+  			onSyncDataRequest(dataFrame);
   			break;
 
   		case DEVICE_DATA_FRAME:
-  			onDeviceDataFrame(dataFrame.dataBody, dataFrame.token);
+  			onDeviceDataFrame(dataFrame);
   			break;
 
   		case DEVICE_DATA_END_FRAME:
-  			onDeviceDataEndFrame(dataFrame.token);
+  			onDeviceDataEndFrame(dataFrame);
   			break;
-            
-        case AUTH_LOGIN_REQUEST:
-            onAuthLoginRequest(dataFrame.dataBody);
-            break;
-
-  		default:
+      
+      case AUTH_TOKEN_UPDATE_REQUEST:
+        onAuthTokenUpdateRequest(dataFrame);
+        break;
+          
+      default:
 
   	}
   }
 
-  const onLoginRequest = (dataBody) => {
-    dataBody = JSON.parse(dataBody);
-  	usersDB.login(dataBody.userName, dataBody.password, (result) => {
+  const onLoginRequest = (dataFrame) => {
+  	usersDB.login(dataFrame.userName, dataFrame.password, (result) => {
 
-      if (result.statusCode == STATUS_202_AUTHENTICATED) {
-        var dataFrame = {
+      const responseDataFrame = {
           frameCategory: LOGIN_RESPONSE,
-          dataBody: JSON.stringify({
-            statusCode: result.statusCode,
-            userName: result.user.userName,
-            password: result.user.password
-          }),
-          token: null
+          userName: result.userName,
+          password: result.password,
+          statusCode: result.statusCode,
+          dataBody: null,
+          lastSyncDate: null
         };
-        sendDataFrame(dataFrame, STATUS_202_AUTHENTICATED);
-      } else {
-        var dataFrame = {
-          frameCategory: LOGIN_RESPONSE,
-          dataBody: JSON.stringify({
-            statusCode: result.statusCode,
-            userName: result.user.userName,
-            password: null
-          }),
-          token: null
-        };
-        sendDataFrame(dataFrame, result.statusCode);
-      }
-
-
+      sendDataFrame(responseDataFrame);
   	});
   }
-  
-  const onAuthLoginRequest = (dataBody) => {
+
+  const onCreateUserRequest = (dataFrame) => {
+
+  	usersDB.createUser(dataFrame.userName, dataFrame.password, (result) => {
       
-      console.log('dataBody');
-      console.dir(dataBody);
-      
-//      dataBody = JSON.parse(dataBody);
-      
-//      console.log('dataBody');
-//      console.dir(dataBody);
-            
-      usersDB.loginWithAuthToken(dataBody.authToken, (result) => {
-      
-          if (result.statusCode == STATUS_202_AUTHENTICATED
-              || result.statusCode == STATUS_201_CREATED) {
-            var dataFrame = {
-              frameCategory: AUTH_LOGIN_RESPONSE,
-              dataBody: JSON.stringify({
-                  statusCode: result.statusCode,
-                  authToken: result.authToken
-              }),
-              token: null
+      const responseDataFrame = {
+          frameCategory: CREATE_USER_RESPONSE,
+          userName: result.userName,
+          password: result.password,
+          statusCode: result.statusCode,
+          dataBody: null,
+          lastSyncDate: null
+        };
+      sendDataFrame(responseDataFrame);
+  	});
+  }
+
+  const onSyncDataRequest = (dataFrame) => {
+
+    const userName = dataFrame.userName;
+    const password = dataFrame.password;
+    const authToken = dataFrame.authToken;
+
+    if (!isLoginArgValid(userName, password, authToken)) {
+      const responseDataFrame = {
+        frameCategory: SYNC_DATA_RESPONSE,
+        userName: userName,
+        password: password,
+        statusCode: STATUS_400_WRONG_ARGS,
+        dataBody: null,
+        lastSyncDate: null
+      };
+      sendDataFrame(responseDataFrame);
+    } else {
+      if (userName != null && password != null) {
+        // ユーザ名とパスワードでリクエストか
+        usersDB.login(userName, password, (result) => {
+	        if (result.statusCode === STATUS_202_AUTHENTICATED) {
+            // 認証OKでトークンを発行
+            userId = result.userId;
+  			    serverAuthToken = require('./hashed_token')(result.userId);
+            const responseDataFrame = {
+              frameCategory: SYNC_DATA_RESPONSE,
+              userName: result.userName,
+              password: result.password,
+              statusCode: STATUS_200_SYNC_START_OK,
+              authToken: serverAuthToken,
+              dataBody: null,
+              lastSyncDate: null
             };
-            sendDataFrame(dataFrame, STATUS_202_AUTHENTICATED);
+            sendDataFrame(responseDataFrame);
           } else {
-            var dataFrame = {
-              frameCategory: AUTH_LOGIN_RESPONSE,
-              dataBody: JSON.stringify({
-                statusCode: result.statusCode,
-              }),
-              token: null
+            const responseDataFrame = {
+              frameCategory: SYNC_DATA_RESPONSE,
+              userName: result.userName,
+              password: result.password,
+              statusCode: result.statusCode,
+              authToken: null,
+              dataBody: null,
+              lastSyncDate: null
             };
-            console.log('dataFrame:')
-            console.dir(dataFrame);
-            sendDataFrame(dataFrame, result.statusCode);
+            sendDataFrame(responseDataFrame);
           }
-      });
-  }
+        });
 
-  const onCreateUserRequest = (dataBody) => {
-    dataBody = JSON.parse(dataBody);
-  	usersDB.createUser(dataBody.userName, dataBody.password, (result) => {
-      if (result.statusCode == STATUS_201_CREATED) {
-        var dataFrame = {
-          frameCategory: CREATE_USER_RESPONSE,
-          dataBody: JSON.stringify({
-            statusCode: result.statusCode,
-            userName: dataBody.userName,
-            password: result.user.password
-          }),
-          token: null
-        };
+      } else if (authToken != null) {
+        // 認証トークンによるリクエストか
+        serverAuthToken = authToken;
 
-        sendDataFrame(dataFrame, result.statusCode)
-      } else {
-        var dataFrame = {
-          frameCategory: CREATE_USER_RESPONSE,
-          dataBody: JSON.stringify({
-            statusCode: result.statusCode,
-            userName: dataBody.userName,
-            password: null
-          }),
-          token: null
-        };
-
-        sendDataFrame(dataFrame, result.statusCode)
+        usersDB.loginWithAuthToken(userName, authToken, (result) => {
+          userId = result.userId;
+          const responseDataFrame = {
+              frameCategory: SYNC_DATA_RESPONSE,
+              userName: result.userName,
+              password: result.password,
+              statusCode: result.statusCode,
+              authToken: authToken,
+              dataBody: null,
+              lastSyncDate: null
+            };
+            sendDataFrame(responseDataFrame);
+        });
       }
-
-  	});
+    }
   }
 
-  const onSyncDataRequest = (dataBody) => {
-    dataBody = JSON.parse(dataBody);
-    lastSyncDate = dataBody.lastSyncDate;
-  	usersDB.login(dataBody.userName, dataBody.password, (result) => {
-  		if (result.statusCode === STATUS_202_AUTHENTICATED) {
-  			authToken = require('./hashed_token')(result.user.userId);
-  			userId = result.user.userId;
-  			var dataFrame = {
-  				frameCategory: SYNC_DATA_RESPONSE,
-  				dataBody: JSON.stringify({
-  					statusCode: STATUS_200_SYNC_START_OK,
-            userName: dataBody.userName
-  				}),
-  				token: authToken
-  			};
-  			sendDataFrame(dataFrame, STATUS_200_SYNC_START_OK);
-
-  		} else {
-  			var dataFrame = {
-  				frameCategory: SYNC_DATA_RESPONSE,
-  				dataBody: JSON.stringify({
-  					statusCode: result.statusCode,
-            userName: dataBody.userName
-  				}),
-  				token: null
-  			};
-  			sendDataFrame(dataFrame, result.statusCode);
-
-  		}
-  	});
+  const isLoginArgValid = (userName, password, authToken) => {
+    if (password != null && userName == null) {
+      return false;
+    } 
+    return true;
   }
 
-  const onDeviceDataFrame = (dataBody, token) => {
-  	if (token === authToken) {
-			let data = JSON.parse(dataBody)
+  const onDeviceDataFrame = (dataFrame) => {
+  	if (dataFrame.authToken === serverAuthToken) {
+			let data = JSON.parse(dataFrame.dataBody)
   		deviceDataArray.push(data);
   	} else {
-  		var dataFrame = {
-  			frameCategory: SYNC_DATA_RESPONSE,
-  			dataBody: JSON.stringify({
-  				statusCode: STATUS_401_UNAUTHORIZED
-  			}),
-  			token: null
-  		};
-  		sendDataFrame(dataFrame, STATUS_401_UNAUTHORIZED);
+      const responseDataFrame = {
+        frameCategory: SYNC_DATA_RESPONSE,
+        userName: dataFrame.userName,
+        password: dataFrame.password,
+        statusCode: STATUS_401_UNAUTHORIZED,
+        authToken: null,
+        dataBody: null,
+        lastSyncDate: null
+      };
+      sendDataFrame(responseDataFrame);
   	}
   }
 
-  const onDeviceDataEndFrame = (token) => {
-  	if (token === authToken) {
+  const onDeviceDataEndFrame = (dataFrame) => {
+  	if (dataFrame.authToken === serverAuthToken) {
       dataDB.saveDataArray(userId, deviceDataArray);
       let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + DEVICE_DATA_END_FRAME + ', Device data count: ' + deviceDataArray.length;
     	logger.loggerAction.info(logMessage);
     	console.log(new Date() + ' ' + logMessage);
 
       // todo ここからクラウド側のデータの伝送を始める
-      sendCloudData(token);
+      sendCloudData(authToken);
 
   	} else {
-  		var dataFrame = {
-  			frameCategory: SYNC_DATA_RESPONSE,
-  			dataBody: JSON.stringify({
-  				statusCode: STATUS_401_UNAUTHORIZED
-  			}),
-  			token: null
-  		};
-  		sendDataFrame(dataFrame, STATUS_401_UNAUTHORIZED);
+  		const responseDataFrame = {
+        frameCategory: SYNC_DATA_RESPONSE,
+        userName: dataFrame.userName,
+        password: dataFrame.password,
+        statusCode: STATUS_401_UNAUTHORIZED,
+        authToken: null,
+        dataBody: null,
+        lastSyncDate: null
+      };
+      sendDataFrame(responseDataFrame);
   	}
   }
 
-  const sendDataFrame = (dataFrame, statusCode) => {
+  const onAuthTokenUpdateRequest = (dataFrame) => {
+    usersDB.updateAuthToken(dataFrame.authToken, dataFrame.dataBody, (result) => {
+      userId = result.userId;
+      const responseDataFrame = {
+        frameCategory: AUTH_TOKEN_UPDATE_RESPONSE,
+        userName: result.userName,
+        password: result.password,
+        statusCode: result.statusCode,
+        authToken: result.authToken,
+        dataBody: null,
+        lastSyncDate: null
+      };
+      sendDataFrame(responseDataFrame);
+    });
+  }
+
+  const sendDataFrame = (dataFrame) => {
   	var jsonRes = JSON.stringify(dataFrame);
   	// console.log('response: ' + jsonRes);
   	connection.sendUTF(jsonRes);
 
-  	let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + dataFrame.frameCategory + ', statusCode: ' + statusCode;
+  	let logMessage = 'Remote Address: ' + connection.remoteAddress 
+      + ', FrameCategory: ' + dataFrame.frameCategory + ', statusCode: ' 
+      + dataFrame.statusCode;
   	logger.loggerAction.info(logMessage);
   	console.log(new Date() + ' ' + logMessage);
   }
 
-  const sendCloudData = (token) => {
+  const sendCloudData = (authToken) => {
     dataDB.loadDataLaterThanTime(userId, lastSyncDate, (loadedRows) => {
 
-      for ( var i = 0 ; i < loadedRows.length ; i++ ) {
-        let dataFrame = {
-    			frameCategory: CLOUD_DATA_FRAME,
-    			dataBody: JSON.stringify(loadedRows[i]),
-    			token: token
-    		};
-        let jsonData = JSON.stringify(dataFrame);
-        connection.sendUTF(jsonData);
-      }
+      loadedRows.forEach((row) => {
+        const cloudDataFrame = {
+          frameCategory: CLOUD_DATA_FRAME,
+          userName: null,
+          password: null,
+          statusCode: null,
+          authToken: authToken,
+          dataBody: JSON.stringify(row),
+          lastSyncDate: null
+        };
+        connection.sendUTF(JSON.stringify(cloudDataFrame));
+      });
 
-      let endDataFrame = {
+      const cloudDataEndFrame = {
         frameCategory: CLOUD_DATA_END_FRAME,
-        dataBody: JSON.stringify({
-					statusCode: STATUS_200_SYNC_END_OK,
-					userName: null,
-					password: null
-				}),
-        token: token
+        userName: null,
+        password: null,
+        statusCode: null,
+        authToken: authToken,
+        dataBody: null,
+        lastSyncDate: null
       };
-      let jsonEndData = JSON.stringify(endDataFrame);
-      connection.sendUTF(jsonEndData);
-
-      let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + CLOUD_DATA_END_FRAME + ', Cloud data count: ' + loadedRows.length;
+      connection.sendUTF(JSON.stringify(cloudDataEndFrame));
+      const logMessage 
+        = 'Remote Address: ' + connection.remoteAddress 
+          + ', FrameCategory: ' + CLOUD_DATA_END_FRAME 
+          + ', Cloud data count: ' + loadedRows.length;
     	logger.loggerAction.info(logMessage);
     	console.log(new Date() + ' ' + logMessage);
     });

@@ -1,10 +1,13 @@
-var STATUS_201_CREATED              = "STATUS_201_CREATED";
-var STATUS_202_AUTHENTICATED        = 'STATUS_202_AUTHENTICATED';
-var STATUS_400_DUPLICATE_USER_NAME  = 'STATUS_400_DUPLICATE_USER_NAME';
-var STATUS_400_SHORT_USER_NAME      = "STATUS_400_SHORT_USER_NAME";
-var STATUS_400_SHORT_PASSWORD       = "STATUS_400_SHORT_PASSWORD";
-var STATUS_401_UNAUTHORIZED         = "STATUS_401_UNAUTHORIZED";
-var STATUS_404_NOT_FOUND            = 'STATUS_404_NOT_FOUND';
+const STATUS_200_AUTH_TOKEN_UPDATED = 'STATUS_200_AUTH_TOKEN_UPDATED';
+const STATUS_201_CREATED              = "STATUS_201_CREATED";
+const STATUS_202_AUTHENTICATED        = 'STATUS_202_AUTHENTICATED';
+const STATUS_204_NO_AUTH_TOKEN        = 'STATUS_204_NO_AUTH_TOKEN';
+const STATUS_400_DUPLICATE_USER_NAME  = 'STATUS_400_DUPLICATE_USER_NAME';
+const STATUS_400_SHORT_USER_NAME      = "STATUS_400_SHORT_USER_NAME";
+const STATUS_400_SHORT_PASSWORD       = "STATUS_400_SHORT_PASSWORD";
+const STATUS_400_WRONG_ARGS         = 'STATUS_400_WRONG_ARGS';
+const STATUS_401_UNAUTHORIZED         = "STATUS_401_UNAUTHORIZED";
+const STATUS_404_NOT_FOUND            = 'STATUS_404_NOT_FOUND';
 
 var _client;
 
@@ -14,6 +17,7 @@ function RVUsersDB(client) {
 
 RVUsersDB.prototype.login = (userName, password, callback) => {
   // ログインの流れ
+  
   // ユーザ名とパスワードでDBクエリ
   // if データ件数が1件ヒット
   //       202 AUTHENTICATED ユーザデータを返す。
@@ -24,14 +28,6 @@ RVUsersDB.prototype.login = (userName, password, callback) => {
   //    else
   //        404 NOT_FOUND ユーザ名だけを返す。
 
-//   c.query('SELECT * FROM users WHERE id = ? AND name = ?',
-//         [ 1337, 'Frylock' ],
-//         function(err, rows) {
-//   if (err)
-//     throw err;
-//   console.dir(rows);
-// });
-
   let queryUser = 'SELECT * FROM returnvisitor_db.users WHERE user_name = :userName AND password = :password ;';
   _client.query(queryUser,
     {userName: userName, password: password},
@@ -40,11 +36,9 @@ RVUsersDB.prototype.login = (userName, password, callback) => {
       if (rows.info.numRows == 1) {
         // データが1件だけの時のみデータを返す。
         let result = {
-          user: {
-            userName: rows[0].user_name,
-            password: rows[0].password,
-            userId: rows[0].user_id
-          },
+          userName: rows[0].user_name,
+          password: rows[0].password,
+          userId: rows[0].user_id,
           statusCode: STATUS_202_AUTHENTICATED
         };
         console.log(new Date() + ' Login, authenticated: ' + userName);
@@ -54,18 +48,16 @@ RVUsersDB.prototype.login = (userName, password, callback) => {
         RVUsersDB.prototype.existsUser(userName, (exists) => {
           if (exists) {
             let result = {
-              user:{
-                userName: userName
-              },
+              userName: userName,
+              password: password,
               statusCode: STATUS_401_UNAUTHORIZED
             }
             console.log(new Date() + ' Login, unauthorized: ' + userName);
             callback(result);
           } else {
             let result = {
-              user:{
-                userName: userName
-              },
+              userName: userName,
+              password: password,
               statusCode: STATUS_404_NOT_FOUND
             }
             console.log(new Date() + ' Login, not found: ' + userName);
@@ -108,9 +100,7 @@ RVUsersDB.prototype.createUser = (userName, password, callback) => {
       if (exists) {
 
         let result = {
-          user:{
-            userName: userName
-          },
+          userName: userName,
           statusCode: STATUS_400_DUPLICATE_USER_NAME
         };
 
@@ -121,9 +111,7 @@ RVUsersDB.prototype.createUser = (userName, password, callback) => {
         if (userName.length < 8) {
 
           let result = {
-            user:{
-              userName: userName
-            },
+            userName: userName,
             statusCode: STATUS_400_SHORT_USER_NAME
           };
 
@@ -134,9 +122,7 @@ RVUsersDB.prototype.createUser = (userName, password, callback) => {
           if (password.length < 8) {
 
             let result = {
-              user:{
-                userName: userName
-              },
+              userName: userName,
               statusCode: STATUS_400_SHORT_PASSWORD
             };
 
@@ -158,6 +144,7 @@ RVUsersDB.prototype.createUser = (userName, password, callback) => {
               if (rows) {
                 if (rows.info.affectedRows == 1) {
                   RVUsersDB.prototype.login(userName, password, (result) => {
+                    // 新規作成なのでステータスコードを書き換える
                     result.statusCode = STATUS_201_CREATED;
                     console.log(new Date() + ' Create user success: ' + userName);
                     callback(result);
@@ -197,36 +184,102 @@ RVUsersDB.prototype.existsUser = (userName, callback) => {
   _client.end();
 }
 
-RVUsersDB.prototype.loginWithAuthToken = (authToken, callback) => {
-    
-    let authTokenQuery = 'SELECT * FROM returnvisitor_db.users WHERE auth_token = :authToken ;';
+RVUsersDB.prototype.loginWithAuthToken = (userName, authToken, callback) => {
+
+    // authTokenログインの流れ
+    // queryAuthToken
+    //  -> 存在する場合　成功
+    //  -> 存在しない場合
+    //      -> insertAuthToken アカウントの作成
+    //        -> 成功する場合
+    //            -> queryAuthToken  
+    //              -> 存在する場合　成功
+    //              -> 存在しない場合 失敗
+
+    queryAuthToken(authToken, (data) => {
+      if (data) {
+      let result = {
+            statusCode: STATUS_202_AUTHENTICATED,
+            userName: data.user_name,
+            password: data.password,
+            userId: data.user_id,
+            authToken: authToken
+        }
+        console.log(new Date() + ' Successfully logged in with authToken: ' + authToken);
+        callback(result);
+    } else {
+        console.log(new Date() + ' Login, not found authToken: ' + authToken);
+        console.log(new Date() + ' Creating user with authToken: ' + authToken);
+        insertAuthToken(userName, authToken, (success) => {
+          if (success) {
+            console.log(new Date() + ' Successfully created user with authToken: ' + authToken);
+            console.log(new Date() + ' Trying login again with authToken: ' + authToken);
+            queryAuthToken(authToken, (data) => {
+              let result = {
+                statusCode: STATUS_202_AUTHENTICATED,
+                userName: data.user_name,
+                password: data.password,
+                userId: data.user_id,
+                authToken: authToken
+              }
+              console.log(new Date() + ' Second login succeed with authToken: ' + authToken);
+              callback(result);
+            });
+          } else {
+            let result = {
+                statusCode: STATUS_401_UNAUTHORIZED,
+                userName: data.user_name,
+                password: data.password,
+                userId: data.user_id,
+                authToken: authToken
+            }
+            console.log(new Date() + ' Second login failed with authToken: ' + authToken);
+            callback(result);
+          }
+        });
+      }
+    });
+           
+}
+
+const queryAuthToken = (authToken, callback) => {
+
+  // callback(queried data OR null)
+
+  let authTokenQuery 
+  = 'SELECT * FROM returnvisitor_db.users WHERE auth_token = :authToken ;';
     _client.query(authTokenQuery,
                  {authToken: authToken},
                  (err, rows) => {
-        if (rows.info.numRows == 1) {
-            let result = {
-                statusCode: STATUS_202_AUTHENTICATED,
-                userId: rows[0].auth_token
-            }
-            console.log(new Date() + ' Login, found authToken: ' + authToken);
-            callback(result);
-        } else if (rows.info.numRows <= 0) {
+
+      if (rows.info.numRows == 1) {
         
-            console.log(new Date() + ' Login, not found authToken: ' + authToken);
-            console.log(new Date() + ' Creating user with authToken: ' + authToken);
-            createUserWithAuthToken(authToken, callback);
-        }
+        // console.log('rows[0]');
+        // console.dir(rows[0]);
+
+        callback(rows[0]);
+      } else {
+        callback(null);
+      }
     });
     _client.end();
 }
 
-const createUserWithAuthToken = (authToken, callback) => {
+const insertAuthToken = (userName, authToken, callback) => {
+
+    // callback(success)
+
     // generate userId
-    var dateString = new Date().getTime().toString();
-    var userId = 'user_id_' + authToken + '_' + dateString;
+    const dateString = new Date().getTime().toString();
+    let userId;
+    if (userName != null) {
+      userId = 'user_id_' + userName + '_' + dateString;
+    } else {
+      userId = 'user_id_' + authToken + '_' + dateString;
+    }
 
     // 新規作成クエリ
-    var createUserQuery = 'INSERT INTO returnvisitor_db.users (auth_token, user_id, updated_at) VALUES (:authToken, :userId, :updated_at );';
+    const createUserQuery = 'INSERT INTO returnvisitor_db.users (auth_token, user_id, updated_at) VALUES (:authToken, :userId, :updated_at );';
     let dateTime = new Date().getTime().toString();
     _client.query(createUserQuery,
       {
@@ -237,13 +290,14 @@ const createUserWithAuthToken = (authToken, callback) => {
        console.dir(err);
       if (rows) {
         if (rows.info.affectedRows == 1) {
-            
-            console.log('rows')
-            console.dir(rows);
-            
-            // 再帰的に呼び出してログインを完了させる。
-            loginWithAuthToken(authToken, callback);    
+            // console.log('rows')
+            // console.dir(rows);            
+            callback(true);
+        } else {
+          callback(false);
         }
+      } else {
+        callback(false);
       }
     });
     _client.end();
@@ -251,6 +305,37 @@ const createUserWithAuthToken = (authToken, callback) => {
 
 RVUsersDB.prototype.updateAuthToken = (oldAuthToken, newAuthToken, callback) => {
     
+    console.log('oldAuthToken: ' + oldAuthToken);
+    queryAuthToken(oldAuthToken, (succeed) => {
+      if (succeed) {
+        const updateQuery 
+          = 'UPDATE returnvisitor_db.users SET auth_token = :newAuthToken WHERE auth_token = :oldAuthToken;';
+         _client.query(updateQuery,
+          {
+            newAuthToken : newAuthToken,
+            oldAuthToken : oldAuthToken
+          },
+          (err, rows) => {
+            if (rows.info.affectedRows == 1) {
+              RVUsersDB.prototype.loginWithAuthToken(null, newAuthToken, (result) => {
+                result.statusCode = STATUS_200_AUTH_TOKEN_UPDATED;
+                callback(result);
+              });
+            }
+        });
+        _client.end();
+    } else {
+      let result = {
+          statusCode: STATUS_204_NO_AUTH_TOKEN,
+          userName: null,
+          password: null,
+          userId: null,
+          authToken: oldAuthToken
+      }
+      console.log(new Date() + ' Not found authToken to update: ' + oldAuthToken);
+      callback(result);
+    }
+  });
 }
 
 module.exports = RVUsersDB;

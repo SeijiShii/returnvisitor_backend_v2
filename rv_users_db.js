@@ -1,12 +1,16 @@
-const STATUS_200_AUTH_TOKEN_UPDATED = 'STATUS_200_AUTH_TOKEN_UPDATED';
-const STATUS_201_CREATED              = "STATUS_201_CREATED";
+// RVCloudSyndDataFrame: StatusCode
+const STATUS_200_AUTH_TOKEN_UPDATED       = 'STATUS_200_AUTH_TOKEN_UPDATED';
+const STATUS_200_SYNC_START_OK_WITH_NAME 	= 'STATUS_200_SYNC_START_OK_WITH_NAME';
+const STATUS_200_SYNC_START_OK_WITH_TOKEN = 'STATUS_200_SYNC_START_OK_WITH_TOKEN';
+const STATUS_200_SYNC_END_OK			    = 'STATUS_200_SYNC_END_OK';
+const STATUS_201_CREATED_USER         = 'STATUS_201_CREATED_USER';
 const STATUS_202_AUTHENTICATED        = 'STATUS_202_AUTHENTICATED';
 const STATUS_204_NO_AUTH_TOKEN        = 'STATUS_204_NO_AUTH_TOKEN';
 const STATUS_400_DUPLICATE_USER_NAME  = 'STATUS_400_DUPLICATE_USER_NAME';
-const STATUS_400_SHORT_USER_NAME      = "STATUS_400_SHORT_USER_NAME";
-const STATUS_400_SHORT_PASSWORD       = "STATUS_400_SHORT_PASSWORD";
-const STATUS_400_WRONG_ARGS         = 'STATUS_400_WRONG_ARGS';
-const STATUS_401_UNAUTHORIZED         = "STATUS_401_UNAUTHORIZED";
+const STATUS_400_SHORT_USER_NAME      = 'STATUS_400_SHORT_USER_NAME';
+const STATUS_400_SHORT_PASSWORD       = 'STATUS_400_SHORT_PASSWORD';
+const STATUS_400_WRONG_ARGS           = 'STATUS_400_WRONG_ARGS';
+const STATUS_401_UNAUTHORIZED         = 'STATUS_401_UNAUTHORIZED';
 const STATUS_404_NOT_FOUND            = 'STATUS_404_NOT_FOUND';
 
 var _client;
@@ -15,7 +19,7 @@ function RVUsersDB(client) {
   _client = client;
 }
 
-RVUsersDB.prototype.login = (userName, password, callback) => {
+RVUsersDB.prototype.loginWithName = (userName, password, callback) => {
   // ログインの流れ
   
   // ユーザ名とパスワードでDBクエリ
@@ -39,7 +43,7 @@ RVUsersDB.prototype.login = (userName, password, callback) => {
           userName: rows[0].user_name,
           password: rows[0].password,
           userId: rows[0].user_id,
-          statusCode: STATUS_202_AUTHENTICATED
+          statusCode: STATUS_202_AUTHENTICATED_WITH_NAME
         };
         console.log(new Date() + ' Login, authenticated: ' + userName);
         callback(result);
@@ -143,9 +147,9 @@ RVUsersDB.prototype.createUser = (userName, password, callback) => {
               // console.dir(err);
               if (rows) {
                 if (rows.info.affectedRows == 1) {
-                  RVUsersDB.prototype.login(userName, password, (result) => {
+                  RVUsersDB.prototype.loginWithName(userName, password, (result) => {
                     // 新規作成なのでステータスコードを書き換える
-                    result.statusCode = STATUS_201_CREATED;
+                    result.statusCode = STATUS_201_CREATED_USER_WITH_NAME;
                     console.log(new Date() + ' Create user success: ' + userName);
                     callback(result);
                   });
@@ -184,67 +188,126 @@ RVUsersDB.prototype.existsUser = (userName, callback) => {
   _client.end();
 }
 
-RVUsersDB.prototype.loginWithAuthToken = (userName, authToken, callback) => {
+RVUsersDB.prototype.syncRequestWithToken = (authToken, updatedToken, callback) => {
 
-    // authTokenログインの流れ
-    // queryAuthToken
-    //  -> 存在する場合　成功
-    //  -> 存在しない場合
-    //      -> insertAuthToken アカウントの作成
-    //        -> 成功する場合
-    //            -> queryAuthToken  
-    //              -> 存在する場合　成功
-    //              -> 存在しない場合 失敗
+    // authToken同期リクエストの流れ
+    // 引数authTokenでqueryAuthToken
+    //  -> 存在する場合　以前にログインしている
+    //    -> updatedTokenで書き換える
+    //      -> 成功 queryAuthToken updatedToken
+    //        -> 成功 STATUS_200_SYNC_START_OK_WITH_TOKEN
+    //        -> 失敗 STATUS_401_UNAUTHORIZED
+    //      -> 失敗 STATUS_401_UNAUTHORIZED
+    //  -> 存在しない場合　始めてのログインである
+    //        このときauthTokenとupdatedTokenには同じ文字列が入っているものとする。
+    //    -> authToken === updatedToken
+    //      -> TRUE
+    //        -> insertAuthToken authToken アカウントの作成
+    //          -> 成功 queryAuthToken authToken
+    //              -> 成功 STATUS_200_SYNC_START_OK_WITH_TOKEN 
+    //              -> 失敗 STATUS_401_UNAUTHORIZED
+    //          -> 失敗 STATUS_401_UNAUTHORIZED
+    //      -> FALSE
+    //          -> 同じトークンが入っていない STATUS_401_UNAUTHORIZED
 
-    queryAuthToken(authToken, (data) => {
+    
+
+  const mToken = authToken.slice(0, 15);
+  const mUpdatede = updatedToken.slice(0, 15);
+  console.log(new Date() + ' AuthToken: ' + mToken);
+  console.log(new Date() + ' UpdatedToken: ' + mUpdatede);
+
+  queryAuthToken(authToken, (data) => {
+    // 引数authTokenでqueryAuthToken
       if (data) {
-      let result = {
-            statusCode: STATUS_202_AUTHENTICATED,
-            userName: data.user_name,
-            password: data.password,
-            userId: data.user_id,
-            authToken: authToken
-        }
-        console.log(new Date() + ' Successfully logged in with authToken: ' + authToken);
-        callback(result);
-    } else {
-        console.log(new Date() + ' Login, not found authToken: ' + authToken);
-        console.log(new Date() + ' Creating user with authToken: ' + authToken);
-        insertAuthToken(userName, authToken, (success) => {
+        // -> 存在する場合　以前にログインしている
+        //  -> updatedTokenで書き換える
+        console.log(new Date() + ' Found account with token: ' + mToken);
+        console.log(new Date() + ' Updating the account with token: ' + mUpdatede);
+        updateAuthToken(authToken, updatedToken, (success) => {
           if (success) {
-            console.log(new Date() + ' Successfully created user with authToken: ' + authToken);
-            console.log(new Date() + ' Trying login again with authToken: ' + authToken);
-            queryAuthToken(authToken, (data) => {
-              let result = {
-                statusCode: STATUS_202_AUTHENTICATED,
-                userName: data.user_name,
-                password: data.password,
-                userId: data.user_id,
-                authToken: authToken
+            // -> 成功 queryAuthToken updatedToken
+            console.log(new Date() + ' Successfully updated account with token: ' + mUpdatede);
+            console.log(new Date() + ' Querying updated account with token: ' + mUpdatede);
+            queryAuthToken(updatedToken, (data) => {
+              if (data) {
+                // -> 成功 STATUS_200_SYNC_START_OK_WITH_TOKEN
+                console.log(new Date() + ' Successfully queried account with token: ' + mUpdatede);
+                data.statusCode = STATUS_200_SYNC_START_OK_WITH_TOKEN;
+                callback(data);
+              } else {
+                // -> data == null 失敗 STATUS_401_UNAUTHORIZED
+                console.log(new Date() + ' Failed querying account with updated token: ' + mUpdatede);
+                let result = {
+                  statusCode: STATUS_401_UNAUTHORIZED,
+                  authToken: authToken
+                }
+                callback(result);
               }
-              console.log(new Date() + ' Second login succeed with authToken: ' + authToken);
-              callback(result);
             });
           } else {
+            // -> 失敗 STATUS_401_UNAUTHORIZED
+            console.log(new Date() + ' Failed updating account with token: ' + mUpdatede);
             let result = {
-                statusCode: STATUS_401_UNAUTHORIZED,
-                userName: data.user_name,
-                password: data.password,
-                userId: data.user_id,
-                authToken: authToken
+              statusCode: STATUS_401_UNAUTHORIZED,
+              authToken: authToken
             }
-            console.log(new Date() + ' Second login failed with authToken: ' + authToken);
             callback(result);
           }
         });
+      } else {
+        // -> 存在しない場合　始めてのログインである
+        console.log(new Date() + ' Not found account with token: ' + mToken);
+        if (authToken === updatedToken) {
+          // このときauthTokenとupdatedTokenには同じ文字列が入っているものとする。
+          // -> insertAuthToken authToken アカウントの作成
+          console.log(new Date() + ' Old and updated tokens are same.');
+          console.log(new Date() + ' Creating account with token: ' + mToken);
+          insertAuthToken(authToken, (success) => {
+            if (success) {
+              // -> 作成成功 queryAuthToken authToken
+              console.log(new Date() + ' Successfully created account with token: ' + mToken);
+              queryAuthToken(authToken, (data) => {
+                if (data) {
+                  // -> クエリ成功 STATUS_200_SYNC_START_OK_WITH_TOKEN 
+                  data.statusCode = STATUS_200_SYNC_START_OK_WITH_TOKEN;
+                  callback(data);
+                } else {
+                  // -> クエリ失敗 STATUS_401_UNAUTHORIZED
+                  console.log(new Date() + ' Failed querying created account with token: ' + mToken);
+                  let result = {
+                    statusCode: STATUS_401_UNAUTHORIZED,
+                    authToken: authToken
+                  }
+                  callback(result);
+                }
+              });
+            } else {
+              // -> 作成失敗 STATUS_401_UNAUTHORIZED
+              console.log(new Date() + ' Failed creating account with token: ' + mUpdatede);
+              let result = {
+                statusCode: STATUS_401_UNAUTHORIZED,
+                authToken: authToken
+              }
+              callback(result);
+            }
+          });
+        }  else {
+          console.log(new Date() + ' Old and updated tokens are different.');
+          let result = {
+            statusCode: STATUS_401_UNAUTHORIZED,
+            authToken: authToken
+          }
+          callback(result);
+        }
       }
-    });
-           
+  });
 }
+
 
 const queryAuthToken = (authToken, callback) => {
 
-  // callback(queried data OR null)
+  // callback(queried single data OR null)
 
   let authTokenQuery 
   = 'SELECT * FROM returnvisitor_db.users WHERE auth_token = :authToken ;';
@@ -252,12 +315,13 @@ const queryAuthToken = (authToken, callback) => {
                  {authToken: authToken},
                  (err, rows) => {
 
-      if (rows.info.numRows == 1) {
-        
-        // console.log('rows[0]');
-        // console.dir(rows[0]);
-
-        callback(rows[0]);
+      if (rows) {
+        if (rows.info.numRows == 1) {
+          // 1件見つかった場合
+          callback(rows[0]);
+        } else {
+          callback(null);
+        }
       } else {
         callback(null);
       }
@@ -265,21 +329,18 @@ const queryAuthToken = (authToken, callback) => {
     _client.end();
 }
 
-const insertAuthToken = (userName, authToken, callback) => {
+const insertAuthToken = (authToken, callback) => {
 
     // callback(success)
 
     // generate userId
     const dateString = new Date().getTime().toString();
-    let userId;
-    if (userName != null) {
-      userId = 'user_id_' + userName + '_' + dateString;
-    } else {
-      userId = 'user_id_' + authToken + '_' + dateString;
-    }
+    const name = authToken.slice(0, 9);
+    const userId = 'user_id_' + name + '_' + dateString;
 
     // 新規作成クエリ
-    const createUserQuery = 'INSERT INTO returnvisitor_db.users (auth_token, user_id, updated_at) VALUES (:authToken, :userId, :updated_at );';
+    const createUserQuery 
+      = 'INSERT INTO returnvisitor_db.users (auth_token, user_id, updated_at) VALUES (:authToken, :userId, :updated_at );';
     let dateTime = new Date().getTime().toString();
     _client.query(createUserQuery,
       {
@@ -287,7 +348,7 @@ const insertAuthToken = (userName, authToken, callback) => {
         userId: userId, 
         updated_at: dateTime},
       (err, rows) => {
-       console.dir(err);
+      //  console.dir(err);
       if (rows) {
         if (rows.info.affectedRows == 1) {
             // console.log('rows')
@@ -303,39 +364,29 @@ const insertAuthToken = (userName, authToken, callback) => {
     _client.end();
 }
 
-RVUsersDB.prototype.updateAuthToken = (oldAuthToken, newAuthToken, callback) => {
-    
-    console.log('oldAuthToken: ' + oldAuthToken);
-    queryAuthToken(oldAuthToken, (succeed) => {
-      if (succeed) {
-        const updateQuery 
+const updateAuthToken = (oldAuthToken, newAuthToken, callback) => {
+
+  // callback(success)
+
+  const updateQuery 
           = 'UPDATE returnvisitor_db.users SET auth_token = :newAuthToken WHERE auth_token = :oldAuthToken;';
-         _client.query(updateQuery,
-          {
-            newAuthToken : newAuthToken,
-            oldAuthToken : oldAuthToken
-          },
-          (err, rows) => {
-            if (rows.info.affectedRows == 1) {
-              RVUsersDB.prototype.loginWithAuthToken(null, newAuthToken, (result) => {
-                result.statusCode = STATUS_200_AUTH_TOKEN_UPDATED;
-                callback(result);
-              });
-            }
-        });
-        _client.end();
-    } else {
-      let result = {
-          statusCode: STATUS_204_NO_AUTH_TOKEN,
-          userName: null,
-          password: null,
-          userId: null,
-          authToken: oldAuthToken
-      }
-      console.log(new Date() + ' Not found authToken to update: ' + oldAuthToken);
-      callback(result);
+    _client.query(updateQuery,
+    {
+      newAuthToken : newAuthToken,
+      oldAuthToken : oldAuthToken
+    },
+    (err, rows) => {
+      if (rows) {
+        if (rows.info.affectedRows == 1) {
+        callback(true);
+      } else {
+        callback(false);
+      } 
+    } else{
+      callback(false);
     }
   });
+  _client.end();
 }
 
 module.exports = RVUsersDB;

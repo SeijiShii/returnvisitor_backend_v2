@@ -32,11 +32,11 @@ const STATUS_401_UNAUTHORIZED         = 'STATUS_401_UNAUTHORIZED';
 const STATUS_404_NOT_FOUND            = 'STATUS_404_NOT_FOUND';
 
 const WebSocketServer = require('websocket').server;
-const https = require('https');
-//  const http = require('http');
+// const https = require('https');
+ const http = require('http');
 
-const dbclient = require('./dbclient');
-// const dbclient = require('./dbclient_test');
+// const dbclient = require('./dbclient');
+const dbclient = require('./dbclient_test');
 
 const RVUsersDB = require('./rv_users_db');
 const usersDB = new RVUsersDB(dbclient);
@@ -45,20 +45,20 @@ const RVDataDB = require('./rv_data_db');
 const dataDB = new RVDataDB(dbclient);
 
 const websocket = require("websocket");
-const fs = require('fs');
+// const fs = require('fs');
 const logger = require('./logger');
 
-const ssl_server_key = './ssl.key/server.key';
-const ssl_server_crt = './ssl.key/server.crt';
-const client_crt = './ssl.key/client.crt';
+// const ssl_server_key = './ssl.key/server.key';
+// const ssl_server_crt = './ssl.key/server.crt';
+// const client_crt = './ssl.key/client.crt';
 
-const options = {
-	key: fs.readFileSync(ssl_server_key),
- cert: fs.readFileSync(ssl_server_crt)
-};
+// const options = {
+// 	key: fs.readFileSync(ssl_server_key),
+//  cert: fs.readFileSync(ssl_server_crt)
+// };
 
-const server = https.createServer(options);
-// const server = http.createServer();
+// const server = https.createServer(options);
+const server = http.createServer();
 const port = 1337;
 
 server.listen(port, function() {

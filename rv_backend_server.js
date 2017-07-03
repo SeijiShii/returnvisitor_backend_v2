@@ -5,10 +5,7 @@ const	LOGIN_REQUEST         = 'LOGIN_REQUEST';
 const	LOGIN_RESPONSE 				= 'LOGIN_RESPONSE';
 const	CREATE_USER_REQUEST 	= 'CREATE_USER_REQUEST';
 const	CREATE_USER_RESPONSE 	= 'CREATE_USER_RESPONSE';
-const	SYNC_DATA_REQUEST_WITH_NAME 		= 'SYNC_DATA_REQUEST_WITH_NAME';
-const	SYNC_DATA_RESPONSE_WITH_NAME 		= 'SYNC_DATA_RESPONSE_WITH_NAME';
-const	SYNC_DATA_REQUEST_WITH_TOKEN 		= 'SYNC_DATA_REQUEST_WITH_TOKEN';
-const	SYNC_DATA_RESPONSE_WITH_TOKEN 		= 'SYNC_DATA_RESPONSE_WITH_TOKEN';
+const SYNC_DATA_REQUEST_WITH_GOOGLE = 'SYNC_DATA_REQUEST_WITH_GOOGLE'
 const	DEVICE_DATA_FRAME 		= 'DEVICE_DATA_FRAME';
 const	DEVICE_DATA_END_FRAME = 'DEVICE_DATA_END_FRAME';
 const	CLOUD_DATA_FRAME 			= 'CLOUD_DATA_FRAME';
@@ -114,12 +111,8 @@ const separateOnFrameCategory = (dataFrame) => {
       onCreateUserRequest(dataFrame);
       break;
 
-    case SYNC_DATA_REQUEST_WITH_NAME:
-      onSyncDataRequestWithName(dataFrame);
-      break;
-    
-    case SYNC_DATA_REQUEST_WITH_TOKEN:
-      onSyncDataRequestWithToken(dataFrame);
+    case SYNC_DATA_REQUEST_WITH_GOOGLE:
+      onSyncDataRequestWithGoogle(dataFrame);
       break;
 
     case DEVICE_DATA_FRAME:
@@ -153,16 +146,6 @@ const separateOnFrameCategory = (dataFrame) => {
       sendDataFrame(responseDataFrame);
   	});
   }
-
-  // const onLoginRequestWithToken = (dataFrame) => {
-  //   usersDB.loginWithAuthToken(dataFrame.authToken, (result) => {
-  //     const responseDataFrame = {
-  //         frameCategory: LOGIN_RESPONSE,
-  //         statusCode: result.statusCode
-  //       };
-  //     sendDataFrame(responseDataFrame);
-  //   });
-  // }
 
   const onCreateUserRequest = (dataFrame) => {
 
@@ -214,39 +197,49 @@ const separateOnFrameCategory = (dataFrame) => {
           }
         });
 
-    // if (userName != null && password != null) {
-    //   // ユーザ名とパスワードでリクエストか
-        
-       
-    // } else if(authToken != null) {
-      
-    // } else {
-    //    const responseDataFrame = {
-    //     frameCategory: SYNC_DATA_RESPONSE,
-    //     userName: userName,
-    //     password: password,
-    //     statusCode: STATUS_400_WRONG_ARGS,
-    //     dataBody: null,
-    //     lastSyncDate: null
-    //   };
-    //   sendDataFrame(responseDataFrame);
-    // }
+
   }
 
-  const onSyncDataRequestWithToken = (dataFrame) => {
-      // 認証トークンによるリクエストか
-        serverAuthToken = dataFrame.authToken;
+  const GoogleAuth = require('google-auth-library');
+  const auth = new GoogleAuth;
+  const clientId = require('./auth_client_ids').googleClientId;
+  const client = new auth.OAuth2(clientId, '', '');
+  
+  const onSyncDataRequestWithGoogle = (dataFrame) => {
 
-        usersDB.syncRequestWithToken(dataFrame.authToken, dataFrame.dataBody, (result) => {
-          userId = result.userId;
-          const responseDataFrame = {
-            frameCategory: SYNC_DATA_RESPONSE_WITH_TOKEN,
-            statusCode: result.statusCode,
-            authToken: result.authToken,
-          };
-          sendDataFrame(responseDataFrame);
+    console.log('authToken: ' + dataFrame.authToken);
+
+    client.verifyIdToken(
+        dataFrame.authToken,
+        clientId,
+        // Or, if multiple clients access the backend:
+        //[CLIENT_ID_1, CLIENT_ID_2, CLIENT_ID_3],
+         (err, login) => {
+
+          var payload = login.getPayload();
+
+          console.log('payload');
+          console.dir(payload);
+          
+          var userid = payload['sub'];
+          // If request specified a G Suite domain:
+          //var domain = payload['hd'];
         });
+
+      // // 認証トークンによるリクエストか
+      //   serverAuthToken = dataFrame.authToken;
+
+      //   usersDB.syncRequestWithToken(dataFrame.authToken, dataFrame.dataBody, (result) => {
+      //     userId = result.userId;
+      //     const responseDataFrame = {
+      //       frameCategory: SYNC_DATA_RESPONSE_WITH_TOKEN,
+      //       statusCode: result.statusCode,
+      //       authToken: result.authToken,
+      //     };
+      //     sendDataFrame(responseDataFrame);
+      //   });
   }
+
 
   const onDeviceDataFrame = (dataFrame) => {
   	if (dataFrame.authToken === serverAuthToken) {
@@ -258,9 +251,6 @@ const separateOnFrameCategory = (dataFrame) => {
         userName: dataFrame.userName,
         password: dataFrame.password,
         statusCode: STATUS_401_UNAUTHORIZED,
-        authToken: null,
-        dataBody: null,
-        lastSyncDate: null
       };
       sendDataFrame(responseDataFrame);
   	}

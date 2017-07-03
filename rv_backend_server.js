@@ -72,9 +72,6 @@ wsServer.on('request', (req) => {
   connection.on('message', (message) => {
     if (message.type === 'utf8') {
 			let dataFrame = JSON.parse(message.utf8Data)
-			let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + dataFrame.frameCategory;
-			logger.loggerAction.info(logMessage);
-			console.log(new Date() + ' ' + logMessage);
 			separateOnFrameCategory(dataFrame);
     }
   });
@@ -124,7 +121,7 @@ const separateOnFrameCategory = (dataFrame) => {
           if (!err) {
 
             lastSyncDate = dataFrame.lastSyncDate;
-            console.log('Last sync date from device: ' + lastSyncDate);
+            // console.log('Last sync date from device: ' + lastSyncDate);
 
             const payload = login.getPayload();
 
@@ -132,6 +129,10 @@ const separateOnFrameCategory = (dataFrame) => {
             // console.dir(payload);
             
             userId = 'GOOGLE_USER_' + payload['sub'];
+
+            let logMessage = 'Remote Address: ' + connection.remoteAddress + ', FrameCategory: ' + dataFrame.frameCategory + ', From: ' + userId;
+            logger.loggerAction.info(logMessage);
+            console.log(new Date() + ' ' + logMessage);
 
             const syncStartOKFrame = {
               frameCategory: SYNC_DATA_RESPONSE,
